@@ -1,0 +1,22 @@
+[project]
+name = "football-app"
+version = "0.1.0"
+description = "Football Legends supporting tools (catalogue generator, future analytics)"
+readme = "README.md"
+authors = [
+    { name = "symeon158", email = "pappasym153@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+football-app = "football_app:main"
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

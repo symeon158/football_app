@@ -1,0 +1,156 @@
+# Football Legends — Architecture
+
+Status: **Phase 1 complete** (project initialisation, schema, auth, security). This document is
+updated at the end of each phase.
+
+## 1. Folder structure
+
+```
+football_app/
+├── web/                          Next.js 16 app (deployed to Vercel, root dir = web)
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── page.tsx                  Landing page (static)
+│   │   │   ├── (auth)/                   Sign-in / sign-up pages + server actions
+│   │   │   ├── (game)/                   Signed-in area: dashboard, and later club,
+│   │   │   │                             collection, team, stadium, marketplace, …
+│   │   │   └── auth/confirm/route.ts     E-mail confirmation / PKCE callback
+│   │   ├── components/
+│   │   │   ├── ui/                       shadcn/ui primitives
+│   │   │   └── brand/                    Original logo/crest artwork
+│   │   ├── lib/
+│   │   │   ├── supabase/                 client.ts (browser), server.ts (RSC/actions),
+│   │   │   │                             proxy.ts (session refresh), admin.ts (server-only)
+│   │   │   ├── data/                     Server-only data loaders (RLS-scoped)
+│   │   │   ├── validation/               zod schemas shared by forms and actions
+│   │   │   ├── env.ts / env.server.ts    Validated configuration (public / secret)
+│   │   │   ├── routes.ts                 Protected routes + open-redirect guard
+│   │   │   └── errors.ts                 DB error code → user message mapping
+│   │   ├── types/database.ts             Generated from the schema (supabase gen types)
+│   │   └── proxy.ts                      Next.js proxy (formerly middleware)
+│   └── scripts/smoke.mjs                 End-to-end smoke test
+├── supabase/
+│   ├── config.toml                       Local stack + auth settings
+│   ├── migrations/                       Versioned SQL (the source of truth)
+│   └── tests/database/                   pgTAP tests (provisioning, economy, RLS)
+├── src/football_app/                     Python (uv) tooling: catalogue generator,
+│                                         home for future analytics jobs
+├── tests/                                Python tests
+└── docs/ARCHITECTURE.md
+```
+
+Future phases add `web/src/features/<domain>/` (cards, team-builder, stadium, market,
+match-engine, challenges) for domain components and logic, keeping `app/` thin.
+
+## 2. Architecture
+
+```
+ Browser ──(HTTPS, publishable key + user JWT cookie)──▶ Next.js on Vercel
+   │                                                      │  Server Components: read via RLS
+   │                                                      │  Server Actions: validate (zod) → RPC
+   │                                                      ▼
+   └──────────(direct reads, RLS-scoped)──────────▶ Supabase
+                                                     ├── Auth (JWT, e-mail/password)
+                                                     ├── Postgres
+                                                     │    ├── public.*  tables + RLS
+                                                     │    ├── public.*  RPCs (SECURITY DEFINER, validate auth.uid())
+                                                     │    └── private.* internal helpers, audit log (not exposed)
+                                                     └── Storage: game-assets bucket (public read)
+```
+
+Principles
+
+1. **The database is the security boundary.** Every rule that protects value — coins, card
+   ownership, stadium levels, match results, rewards — is enforced in Postgres (constraints,
+   RLS, column grants, SECURITY DEFINER functions). The Next.js layer adds validation and UX,
+   but even a hand-crafted API call with the user's own token cannot bypass the rules.
+2. **Writes that move value go through one function.** `private.apply_coin_transaction`
+   is the only code path that changes a balance. It locks the wallet row, is idempotent per
+   `(user_id, idempotency_key)`, refuses negative balances and writes an append-only ledger.
+   Future RPCs (`buy_card`, `open_pack`, `upgrade_stadium`, `play_match`, `claim_challenge`)
+   compose it inside a single transaction.
+3. **Game rules run server-side and deterministically.** The match engine (Phase 7) will be
+   a pure TypeScript module with a seeded PRNG, invoked from a server action; the seed and
+   engine version are stored on `matches` so every result can be replayed and tested.
+4. **Thin pages, typed data.** Pages render; loaders in `lib/data` fetch; generated
+   `Database` types keep queries type-safe end to end.
+5. **Cache Components.** The app uses Next 16 `cacheComponents`: static shells are
+   prerendered, user-specific parts stream in behind `<Suspense>`.
+
+## 3. Database schema
+
+All tables live in `public` with RLS enabled, except `private.audit_log`.
+
+| Table | Purpose | Key constraints |
+|---|---|---|
+| `profiles` | Public game identity (1:1 `auth.users`) | `username` citext unique, regex check; `level`/`xp` ≥ 0 |
+| `players` | Footballer bio (fictional or licensed) | ISO country code; `license_ref` required when `is_fictional = false` |
+| `player_cards` | Collectible card edition: rarity + 6 face stats | all ratings 0–99, weak foot / skills 1–5, `unique(player_id, edition)` |
+| `card_ownership` | A user's copy of a card (duplicates allowed) | FK user + card; `unique(id, user_id)` for composite FKs |
+| `formation_slots` | Positions + pitch coordinates for each formation | PK `(formation, slot)` |
+| `teams` | Saved squads (max 5, one active) | partial unique index on active; captain FK `(captain, user_id)` → ownership |
+| `team_players` | Card in a squad slot (0–10 XI, 11–22 bench) | composite FKs `(team_id,user_id)` and `(ownership_id,user_id)` ⇒ **you can only field cards you own** |
+| `stadiums` | One per user; level per category 1–5 | `capacity`, `stadium_level` are generated columns |
+| `stadium_upgrade_costs` | Price list + match bonus per level | PK `(category, level)` |
+| `stadium_upgrades` | History of paid upgrades | FK to the paying `coin_transactions` row |
+| `wallets` | Current balance | `balance >= 0`; no client UPDATE grant; trigger blocks non-owner edits |
+| `coin_transactions` | Append-only ledger | `amount <> 0`, `balance_after >= 0`, `unique(user_id, idempotency_key)`; update/delete blocked |
+| `matches` / `match_events` | Simulated matches + timeline | seed + engine version for replay; events unique `(match_id, seq)` |
+| `challenges` / `user_challenges` | Daily, weekly, team-building, milestone | progress per `(user, challenge, period_start)`; claim requires completion |
+| `achievements` / `user_achievements` | Badges | PK `(user, achievement)` prevents double unlock |
+
+Indexes cover every foreign key used in lookups plus marketplace filters
+(`player_cards (position, rarity, overall desc)`, nationality, club) and per-user timelines.
+
+**New accounts** (trigger `on_auth_user_created`): profile, wallet funded with 1,000 FC via the
+ledger (`signup_bonus`), stadium (5,000 seats), an active 4-3-3 team with one common card in each
+natural position, five bench commons and one rare (17 cards), captain = best starter.
+
+**Catalogue**: 112 fictional players/cards generated deterministically by
+`uv run football-app generate-catalog` (Python). Licensed real-world data can be added later as
+rows with `is_fictional = false`, `data_source` and a mandatory `license_ref`.
+
+## 4. API surface (server actions and RPCs)
+
+Implemented in Phase 1
+
+| Kind | Name | Notes |
+|---|---|---|
+| Server action | `signUp`, `signIn`, `signOut` | zod-validated; generic error messages (no account enumeration) |
+| Route handler | `GET /auth/confirm` | verifies e-mail OTP / PKCE code; `next` param sanitised |
+| RPC | `is_username_available(text)` | callable by anon (usernames are public) |
+| RPC | `set_active_team(uuid)` | owner-checked |
+| Direct (RLS) | read catalogue, own wallet/ledger/cards/teams/stadium/matches; edit profile cosmetics, stadium name/design, team CRUD | column-level grants limit what can be written |
+
+Planned (each a SECURITY DEFINER RPC called from a server action, one DB transaction):
+
+| Phase | RPC |
+|---|---|
+| 4 | `save_lineup(team_id, slots[])` — atomic lineup replace + chemistry/overall calc |
+| 5 | `buy_card(card_id, idempotency_key)`, `open_pack(pack_id, idempotency_key)` (published odds) |
+| 6 | `upgrade_stadium(category, idempotency_key)` |
+| 7 | `record_match(...)` — server action runs the deterministic engine, RPC persists result + reward |
+| 8 | `claim_challenge(...)`, `claim_achievement(...)`, leaderboard views |
+
+## 5. Authentication and security
+
+- **Supabase Auth** with e-mail + password (min 8, letters + digits). E-mail confirmation is off
+  locally for speed; **enable it in production** (Auth → Providers → Email).
+- **Sessions** live in HTTP cookies managed by `@supabase/ssr`. `src/proxy.ts` refreshes them on
+  every request. Identity on the server is always taken from `auth.getClaims()` (signature-verified
+  JWT), never from `getSession()` or a request parameter.
+- **Route protection** is layered: the proxy redirects anonymous users (UX), every protected
+  page calls `requireUserId()` (authoritative), and RLS protects the data regardless.
+- **Keys**: only the publishable key is shipped to the browser. The secret key is read in
+  `env.server.ts`/`admin.ts`, both marked `server-only` (build fails if imported client-side);
+  the smoke test confirms it is absent from the client bundle.
+- **Least privilege**: `anon` has no table access. `authenticated` has SELECT on catalogues and
+  own rows, and UPDATE only on cosmetic columns. All default Supabase grants are revoked first.
+  Internal functions live in `private`, which is not exposed through the Data API.
+- **Integrity**: CHECK constraints, composite FKs for ownership, append-only ledger, row-locked
+  idempotent coin movements, unique constraints against double-claims, audit log.
+- **Input validation**: zod on every server action, mirrored by DB constraints.
+- **Privacy**: e-mail and auth data remain in `auth.users`; `profiles` contains only public
+  game identity used for leaderboards.
+- **No real money / gambling**: coins are only earned through gameplay; packs will show
+  published, fixed probabilities.

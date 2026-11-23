@@ -135,3 +135,12 @@
     @apply font-sans;
   }
 }
+/* Night-stadium backdrop: two floodlight glows over faint mowing stripes. */
+@utility stadium-bg {
+  background-color: var(--background);
+  background-image:
+    radial-gradient(ellipse 60% 40% at 15% -5%, oklch(0.74 0.17 152 / 0.14), transparent 70%),
+    radial-gradient(ellipse 50% 35% at 95% 0%, oklch(0.83 0.14 85 / 0.08), transparent 70%),
+    repeating-linear-gradient(90deg, oklch(1 0 0 / 0.012) 0 80px, transparent 80px 160px);
+  background-attachment: fixed;
+}

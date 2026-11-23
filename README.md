@@ -13,8 +13,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, schema and secu
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Project setup, architecture, schema, auth | ✅ done |
-| 2 | Dashboard and responsive game UI | ⏳ next |
-| 3 | Player cards, collection, player profiles | |
+| 2 | Dashboard and responsive game UI | ✅ done |
+| 3 | Player cards, collection, player profiles | ⏳ next |
 | 4 | Team builder and formations | |
 | 5 | Coin economy, marketplace, packs | |
 | 6 | Stadium builder | |
@@ -54,7 +54,7 @@ cd web
 npm test                          # Vitest unit tests
 npm run typecheck && npm run lint
 npm run build && npm run start    # then, in another terminal:
-npm run smoke                     # end-to-end: sign-up → dashboard → tamper attempts
+npm run smoke                     # end-to-end: sign-up → dashboard → every route → tamper attempts
 ```
 
 ## Database workflow

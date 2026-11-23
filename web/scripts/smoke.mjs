@@ -80,7 +80,18 @@ const dashHtml = await dash.text();
 check("dashboard renders for signed-in user", dash.status === 200);
 check("dashboard shows username", dashHtml.includes(user.username));
 check("dashboard shows 1,000 FC", dashHtml.includes("1,000"));
-check("dashboard shows the starter squad", dashHtml.includes("Your starter squad") && dashHtml.includes(`${user.username} FC`));
+check("dashboard shows team and rating", dashHtml.includes(`${user.username} FC`) && dashHtml.includes("Team rating"));
+for (const section of ["Latest player cards", "Challenges", "Recent results", "Stadium", "Manager level"]) {
+  check(`dashboard has "${section}" section`, dashHtml.includes(section));
+}
+check("dashboard renders 6 player cards", (dashHtml.match(/<article aria-label=/g) ?? []).length === 6);
+check("dashboard lists daily challenges", dashHtml.includes("Daily Victory"));
+
+for (const path of ["/club", "/collection", "/team", "/stadium", "/marketplace", "/matches", "/challenges", "/leaderboards", "/profile", "/settings"]) {
+  const res = await get(path);
+  const html = await res.text();
+  check(`${path} renders for signed-in user`, res.status === 200 && html.includes("Coming soon"), String(res.status));
+}
 
 const loginWhileSignedIn = await get("/login");
 check("signed-in user is bounced from /login", loginWhileSignedIn.status === 307 &&

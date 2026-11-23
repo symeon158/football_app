@@ -1,6 +1,6 @@
 # Football Legends — Architecture
 
-Status: **Phase 1 complete** (project initialisation, schema, auth, security). This document is
+Status: **Phase 2 complete** (Phase 1: setup, schema, auth, security · Phase 2: game shell, dashboard, responsive UI). This document is
 updated at the end of each phase.
 
 ## 1. Folder structure
@@ -16,12 +16,18 @@ football_app/
 │   │   │   │                             collection, team, stadium, marketplace, …
 │   │   │   └── auth/confirm/route.ts     E-mail confirmation / PKCE callback
 │   │   ├── components/
-│   │   │   ├── ui/                       shadcn/ui primitives
-│   │   │   └── brand/                    Original logo/crest artwork
+│   │   │   ├── ui/                       shadcn/ui primitives (Base UI)
+│   │   │   ├── brand/                    Original logo artwork
+│   │   │   ├── shell/                    Sidebar, mobile tab bar + "More" sheet, top bar, user menu
+│   │   │   ├── game/                     PlayerCard, Crest, Coins, StadiumIllustration (reused by later phases)
+│   │   │   └── dashboard/                Dashboard panels
 │   │   ├── lib/
 │   │   │   ├── supabase/                 client.ts (browser), server.ts (RSC/actions),
 │   │   │   │                             proxy.ts (session refresh), admin.ts (server-only)
-│   │   │   ├── data/                     Server-only data loaders (RLS-scoped)
+│   │   │   ├── data/                     Server-only data loaders (RLS-scoped): viewer, dashboard
+│   │   │   ├── game/                     Pure, unit-tested rules: progression (XP→level),
+│   │   │   │                             team rating, challenge periods, rarity styles
+│   │   │   ├── navigation.ts             Single source for all 12 screens + their roadmap phase
 │   │   │   ├── validation/               zod schemas shared by forms and actions
 │   │   │   ├── env.ts / env.server.ts    Validated configuration (public / secret)
 │   │   │   ├── routes.ts                 Protected routes + open-redirect guard
@@ -76,6 +82,23 @@ Principles
    `Database` types keep queries type-safe end to end.
 5. **Cache Components.** The app uses Next 16 `cacheComponents`: static shells are
    prerendered, user-specific parts stream in behind `<Suspense>`.
+
+## 2b. UI architecture (Phase 2)
+
+- **Shell**: `(game)/layout.tsx` renders a static shell — sidebar on `lg+`, bottom tab bar
+  (Home, Cards, Team, Match, More) on phones/tablets. Only the top-bar status (coins, level,
+  avatar) is user-specific and streams behind `<Suspense>`.
+- **Data**: `getViewer()` is wrapped in React `cache()` so the top bar and page share one
+  profile+wallet query per request. `getDashboard()` runs ten RLS-scoped queries in parallel.
+- **Game rules in pure functions** (`lib/game/*`): XP thresholds `50·L·(L−1)`, team overall =
+  mean effective rating of the XI (100 % natural position, 90 % related, 75 % other, 30 % GK
+  mismatch; empty slots count 0), UTC daily/ISO-week challenge buckets. Phase 4/7/8 server code
+  reuses these so the UI and the server agree.
+- **Cards**: `PlayerCard` uses CSS container queries so text scales with card width; rarity
+  visuals come from one table (`RARITY_STYLE`); hover sheen respects `prefers-reduced-motion`.
+- **Responsive rules**: grids declare `grid-cols-1` on mobile (a `minmax(0,1fr)` track) so wide
+  children like the swipeable card strip cannot widen the page; verified at 390, 820 and 1440 px.
+- Screens from later phases render a "Coming soon" state, so navigation never dead-ends.
 
 ## 3. Database schema
 

@@ -102,7 +102,7 @@ check("dashboard lists daily challenges", dashHtml.includes("Daily Victory"));
 for (const path of ["/settings"]) {
   const res = await get(path);
   const html = await res.text();
-  check(`${path} renders for signed-in user`, res.status === 200 && html.includes("Coming soon"), String(res.status));
+  check(`${path} renders for signed-in user`, res.status === 200 && html.includes("Account &amp; privacy"), String(res.status));
 }
 
 // Phase 3: collection, filters, player profile, comparison

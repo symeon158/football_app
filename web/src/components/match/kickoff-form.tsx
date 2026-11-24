@@ -8,6 +8,7 @@ import { kickOff, type KickoffState } from "@/app/(game)/matches/actions";
 import { Coins } from "@/components/game/coins";
 import { Crest } from "@/components/game/crest";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
 
 type SquadOption = {
@@ -53,6 +54,7 @@ const optionClass =
 
 export function KickoffForm({ squads, idempotencyKey, rewards, goalBonus, goalBonusCap, matchdayIncome, rewardedLeft, playsLeft }: Props) {
   const [state, action, pending] = useActionState<KickoffState, FormData>(kickOff, { ok: false });
+  const hydrated = useHydrated();
   const initial = squads.find((s) => s.isActive) ?? squads[0];
   const [teamId, setTeamId] = useState(initial?.id ?? "");
   const [tactic, setTactic] = useState(initial?.tactic ?? "balanced");
@@ -144,7 +146,7 @@ export function KickoffForm({ squads, idempotencyKey, rewards, goalBonus, goalBo
 
       {state.message && !state.ok && <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.message}</p>}
 
-      <Button type="submit" size="lg" disabled={!canPlay || pending} className="h-12 w-full gap-2 text-base">
+      <Button type="submit" size="lg" disabled={!canPlay || pending || !hydrated} className="h-12 w-full gap-2 text-base">
         <Swords className="size-5" /> {pending ? "Kicking off…" : playsLeft > 0 ? "Kick off" : "No matches left today"}
       </Button>
       {!canPlay && squad?.ready === false && (

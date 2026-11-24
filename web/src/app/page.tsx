@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { Logo } from "@/components/brand/logo";
 import { buttonVariants } from "@/components/ui/button";
@@ -11,7 +12,17 @@ const FEATURES = [
   { title: "Compete", body: "Simulate matches, complete challenges and climb the leaderboards." },
 ];
 
-export default function LandingPage() {
+/** Shown after "Delete my account" redirects here (request-time, so behind Suspense). */
+async function DeletedNotice({ searchParams }: { searchParams: PageProps<"/">["searchParams"] }) {
+  if ((await searchParams).deleted !== "1") return null;
+  return (
+    <p role="status" className="relative mx-auto mt-2 w-full max-w-6xl rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm sm:px-6">
+      Your account and all its data have been deleted. Thanks for playing.
+    </p>
+  );
+}
+
+export default function LandingPage({ searchParams }: PageProps<"/">) {
   return (
     <main className="relative flex flex-1 flex-col overflow-hidden">
       {/* floodlight glow */}
@@ -31,6 +42,9 @@ export default function LandingPage() {
         </nav>
       </header>
 
+      <Suspense fallback={null}>
+        <DeletedNotice searchParams={searchParams} />
+      </Suspense>
       <section className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center gap-10 px-4 py-16 sm:px-6">
         <div className="max-w-2xl space-y-6">
           <p className="text-sm font-medium uppercase tracking-[0.2em] text-gold">The ultimate football card game</p>

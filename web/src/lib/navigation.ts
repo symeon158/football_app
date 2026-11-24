@@ -42,7 +42,7 @@ export const ACCOUNT_NAV: NavItem[] = [
 /** Tabs shown in the mobile bottom bar; everything else lives under "More". */
 export const MOBILE_TABS = ["/dashboard", "/collection", "/team", "/matches"];
 
-export const CURRENT_PHASE = 8;
+export const CURRENT_PHASE = 9;
 
 export function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);

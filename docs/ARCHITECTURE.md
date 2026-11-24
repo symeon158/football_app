@@ -1,6 +1,6 @@
 # Football Legends — Architecture
 
-Status: **Phase 8 complete** (1: setup, schema, auth, security · 2: shell, dashboard · 3: collection, profiles · 4: team builder · 5: marketplace, packs · 6: stadium · 7: match engine · 8: challenges, achievements, leaderboards, profiles). This document is
+Status: **All 9 phases complete.** Deployment: see `DEPLOYMENT.md`; launch readiness: `LAUNCH_CHECKLIST.md`. This document is
 updated at the end of each phase.
 
 ## 1. Folder structure
@@ -256,6 +256,25 @@ replay (`data-match-live`) so the reward can't spoil the result.
   value; ranks with ties, top N plus the caller's own row. Returns public game identity only.
 - **Profiles** — `get_manager_profile(username)` returns a safe, game-only view (no e-mail) used by
   `/profile` (editable display name + 12 original avatars) and `/managers/[username]`.
+
+## 2i. Testing, security review, deployment (Phase 9)
+
+- **Security audit as tests.** `10_security_audit.test.sql` checks the whole schema: RLS on every
+  table, `search_path` on every SECURITY DEFINER function, no anon table grants, no client writes to
+  value-bearing tables, updatable columns limited to the 8 cosmetic ones, security_invoker views,
+  private schema unreachable, `record_match` service-role only, no storage write policies. Verified to
+  catch planted violations.
+- **Account lifecycle.** Settings offers password change (re-verifies the current password on an
+  isolated client), a full JSON data export (via the user's RLS-scoped client) and permanent account
+  deletion (username + password confirmation; auth admin API; cascades tested; audit log scrubbed).
+  Deletion runs as `supabase_auth_admin`, so trigger functions reached by the cascade are SECURITY
+  DEFINER (structural guard in `11_account_deletion.test.sql`).
+- **HTTP hardening.** CSP without nonces (nonce CSP is incompatible with Partial Prerendering),
+  frame-ancestors none, nosniff, referrer/permissions policies, COOP, HSTS + upgrade-insecure-requests
+  on HTTPS only, `X-Powered-By` removed. `shadcn` moved to devDependencies (CLI only), so production
+  dependencies audit clean.
+- **Test pyramid in CI.** Vitest → pgTAP → SQL↔TS parity → HTTP smoke (game + account) → Playwright
+  (desktop journeys + phone overflow/tap) on a real local Supabase stack.
 
 ## 3. Database schema
 

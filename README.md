@@ -7,6 +7,7 @@ Stack: Next.js 16 · React 19 · TypeScript · Tailwind CSS 4 · shadcn/ui · Su
 Storage) · Vercel · uv (Python tooling).
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, schema and security model.
+CI (`.github/workflows/ci.yml`) runs every test suite below on each push and pull request.
 
 ## Roadmap
 
@@ -20,7 +21,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, schema and secu
 | 6 | Stadium builder | ✅ done |
 | 7 | Match simulation engine | ✅ done |
 | 8 | Challenges, achievements, leaderboards | ✅ done |
-| 9 | Testing, security review, deployment | ⏳ next |
+| 9 | Testing, security review, deployment | ✅ done (deploy steps in docs/DEPLOYMENT.md) |
 
 ## Prerequisites
 
@@ -57,7 +58,9 @@ npm run check:boundaries         # server code must not import constants from "u
 CALIBRATE=1 npx vitest run src/lib/engine/calibrate.test.ts --silent=false   # engine outcome report
 INTEGRATION=1 npx vitest run src/lib/game/parity.integration.test.ts       # SQL ↔ TS team metrics (needs local stack)
 npm run build && npm run start    # then, in another terminal:
-npm run smoke                     # end-to-end: sign-up → dashboard → every route → tamper attempts
+npm run smoke                     # end-to-end over HTTP: every feature + tamper attempts
+npm run smoke:account             # settings: password change, data export, account deletion
+npm run test:e2e                  # Playwright browser tests (desktop + phone; uses installed Edge locally)
 ```
 
 ## Database workflow
@@ -67,14 +70,11 @@ npm run smoke                     # end-to-end: sign-up → dashboard → every 
 - Regenerate TypeScript types: `npx supabase gen types typescript --local --schema public > web/src/types/database.ts`
 - Regenerate the fictional catalogue: `uv run football-app generate-catalog`
 
-## Deploying (Phase 9 covers this in full)
+## Deploying
 
-1. Create a Supabase project, then `npx supabase link --project-ref <ref>` and `npx supabase db push`.
-2. In Supabase Auth settings set the Site URL to your Vercel URL, add `<url>/auth/confirm` to the
-   redirect allow-list, and enable e-mail confirmation.
-3. Import the GitHub repo in Vercel with **Root Directory = `web`** and set
-   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SITE_URL`,
-   `SUPABASE_SECRET_KEY` (server-only).
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** (Supabase Cloud + Vercel, step by step) and
+**[docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md)** (what is done and what needs your decision
+before a public launch).
 
 ## Content and licensing
 

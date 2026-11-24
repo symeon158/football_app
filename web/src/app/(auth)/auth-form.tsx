@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useHydrated } from "@/lib/use-hydrated";
 import { initialFormState, type FormState } from "@/lib/validation/auth";
 
 type Field = {
@@ -38,6 +39,7 @@ const FIELDS: Record<Props["mode"], Field[]> = {
 
 export function AuthForm({ mode, action, next, notice }: Props) {
   const [state, formAction, pending] = useActionState(action, initialFormState);
+  const hydrated = useHydrated();
   const isSignup = mode === "signup";
 
   return (
@@ -100,7 +102,7 @@ export function AuthForm({ mode, action, next, notice }: Props) {
         </CardContent>
 
         <CardFooter className="mt-6 flex flex-col gap-3">
-          <Button type="submit" className="h-10 w-full" disabled={pending}>
+          <Button type="submit" className="h-10 w-full" disabled={pending || !hydrated}>
             {pending ? "Please wait…" : isSignup ? "Create club" : "Sign in"}
           </Button>
           <p className="text-sm text-muted-foreground">

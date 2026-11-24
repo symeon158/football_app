@@ -9,7 +9,7 @@ export type Starter = {
 };
 
 /** Positions a player can cover with only a small penalty. */
-const RELATED: Record<Position, Position[]> = {
+export const RELATED: Record<Position, Position[]> = {
   GK: [],
   CB: ["CDM"],
   LB: ["LM", "CB"],

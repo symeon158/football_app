@@ -10,6 +10,11 @@ const GAME_ERROR_MESSAGES: Record<string, string> = {
   CAPTAIN_NOT_IN_TEAM: "The captain must be one of the team's players.",
   NOT_AUTHENTICATED: "Please sign in again.",
   WALLET_NOT_FOUND: "Your wallet could not be found.",
+  CAPTAIN_NOT_STARTER: "Your captain must be in the starting XI.",
+  CARD_NOT_OWNED: "One of those cards isn't in your collection.",
+  DUPLICATE_PLAYER: "A player can only appear once in a squad.",
+  INVALID_LINEUP: "That line-up isn't valid. Please reload and try again.",
+  LAST_TEAM: "You need at least one squad.",
 };
 
 const DEFAULT_MESSAGE = "Something went wrong. Please try again.";

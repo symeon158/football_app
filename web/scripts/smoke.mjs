@@ -94,7 +94,7 @@ for (const section of ["Latest player cards", "Challenges", "Recent results", "S
 check("dashboard renders 6 player cards", (dashHtml.match(/<article aria-label=/g) ?? []).length === 6);
 check("dashboard lists daily challenges", dashHtml.includes("Daily Victory"));
 
-for (const path of ["/club", "/team", "/stadium", "/marketplace", "/matches", "/challenges", "/leaderboards", "/profile", "/settings"]) {
+for (const path of ["/stadium", "/marketplace", "/matches", "/challenges", "/leaderboards", "/profile", "/settings"]) {
   const res = await get(path);
   const html = await res.text();
   check(`${path} renders for signed-in user`, res.status === 200 && html.includes("Coming soon"), String(res.status));
@@ -152,6 +152,38 @@ check("cannot see other users' cards", (others ?? []).length === 0);
 
 const { data: after } = await sb.from("wallets").select("balance").single();
 check("balance unchanged after tampering", after?.balance === 1000);
+
+// Phase 4: team builder and squads
+const teamHtml = await (await get("/team")).text();
+check("team builder renders the pitch", teamHtml.includes("Pick your XI") && teamHtml.includes('aria-label="Pitch, 4-3-3"'));
+check("team builder shows all 11 starters", ["GK:", "LB:", "RB:", "LW:", "ST:", "RW:"].every((p) => teamHtml.includes(`aria-label="${p}`)) && (teamHtml.match(/aria-label="(GK|LB|CB|RB|CM|LW|ST|RW): /g) ?? []).length === 11,
+  String((teamHtml.match(/aria-label="(GK|LB|CB|RB|CM|LW|ST|RW): /g) ?? []).length));
+check("team builder shows rating and chemistry", teamHtml.includes(">Rating<") && teamHtml.includes(">Chemistry<"));
+const clubHtml = await (await get("/club")).text();
+check("club page lists the active squad", clubHtml.includes("Active squad") && clubHtml.includes(`${user.username} FC`));
+
+const uid = (await sb.auth.getUser()).data.user.id;
+const { data: myTeam } = await sb.from("teams").select("id, captain_ownership_id, team_players(slot, ownership_id)").eq("is_active", true).single();
+const slots = myTeam.team_players.map((tp) => ({ slot: tp.slot, ownership_id: tp.ownership_id }));
+const { error: saveErr } = await sb.rpc("save_lineup", { p_team_id: myTeam.id, p_formation: "4-4-2", p_tactic: "defensive", p_captain: myTeam.captain_ownership_id, p_slots: slots });
+check("save_lineup RPC accepts a valid line-up", !saveErr, saveErr?.message);
+const savedHtml = await (await get("/team")).text();
+check("saved formation is shown", savedHtml.includes('aria-label="Pitch, 4-4-2"'));
+
+const { error: directErr } = await sb.from("team_players").insert({ team_id: myTeam.id, user_id: uid, ownership_id: slots[0].ownership_id, slot: 22 });
+check("direct team_players writes are refused", Boolean(directErr), "insert succeeded!");
+const { error: badCapErr } = await sb.rpc("save_lineup", { p_team_id: myTeam.id, p_formation: "4-3-3", p_tactic: "balanced", p_captain: slots.find((x) => x.slot >= 11).ownership_id, p_slots: slots });
+check("bench captain rejected", badCapErr?.message === "CAPTAIN_NOT_STARTER", badCapErr?.message);
+
+const { data: newTeamId, error: createErr } = await sb.rpc("create_team", { p_name: "Smoke Reserves", p_copy_from: myTeam.id });
+check("create_team copies a squad", !createErr && Boolean(newTeamId), createErr?.message);
+check("club page shows the new squad", (await (await get("/club")).text()).includes("Smoke Reserves"));
+const copyHtml = await (await get(`/team?team=${newTeamId}`)).text();
+check("copied squad opens in the builder", copyHtml.includes('aria-label="Pitch, 4-4-2"'));
+const { error: delErr } = await sb.rpc("delete_team", { p_team_id: newTeamId });
+check("delete_team removes it", !delErr, delErr?.message);
+const { error: lastErr } = await sb.rpc("delete_team", { p_team_id: myTeam.id });
+check("cannot delete the last squad", lastErr?.message === "LAST_TEAM", lastErr?.message);
 
 // 6. Sign out
 const signout = await submitForm("/dashboard", {});

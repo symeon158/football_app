@@ -56,17 +56,16 @@ update public.profiles set display_name = 'Dan the Manager' where id = '44444444
 select is((select display_name from public.profiles where id = '44444444-4444-4444-4444-444444444444'),
           'Dan the Manager', 'can edit own display name');
 
--- Ownership is enforced by the database: Eve's card cannot join Dan's team.
+-- Since Phase 4, line-ups change only through save_lineup(): direct writes are refused…
 select throws_ok($$insert into public.team_players (team_id, ownership_id, slot)
                    select t.id, (select id from eve_card), 20 from public.teams t$$,
-                 '23503', null, 'cannot field a card owned by someone else');
+                 '42501', null, 'cannot write team_players directly');
 
--- Captain must be in the team.
-select throws_ok($$update public.teams set captain_ownership_id =
-                     (select co.id from public.card_ownership co
-                       where not exists (select 1 from public.team_players tp where tp.ownership_id = co.id)
-                       limit 1)$$,
-                 '23514', 'CAPTAIN_NOT_IN_TEAM', 'captain must be a team member');
+-- …and save_lineup() refuses cards owned by someone else.
+select throws_ok($$select public.save_lineup(
+                     (select id from public.teams limit 1), '4-3-3', 'balanced', null,
+                     jsonb_build_array(jsonb_build_object('slot', 0, 'ownership_id', (select id from eve_card))))$$,
+                 '42501', 'CARD_NOT_OWNED', 'cannot field a card owned by someone else');
 
 -- Cannot write to another user's team.
 update public.teams set name = 'Hijacked FC' where user_id = '55555555-5555-5555-5555-555555555555';

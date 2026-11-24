@@ -465,8 +465,17 @@ isOneToOne: false
                 }
           }
           Functions: {
-            "is_username_available":
+            "create_team":
+{ Args: { "p_copy_from"?: string,"p_logo_template"?: string,"p_name": string,"p_primary_color"?: string,"p_secondary_color"?: string }; Returns: string
+                           },
+"delete_team":
+{ Args: { "p_team_id": string }; Returns: undefined
+                           },
+"is_username_available":
 { Args: { "p_username": string }; Returns: boolean
+                           },
+"save_lineup":
+{ Args: { "p_captain": string,"p_formation": Database["public"]['Enums']["formation_code"],"p_slots": Json,"p_tactic": Database["public"]['Enums']["match_tactic"],"p_team_id": string }; Returns: undefined
                            },
 "search_key":
 { Args: { "p_text": string }; Returns: string

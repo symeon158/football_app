@@ -1,6 +1,6 @@
 # Football Legends — Architecture
 
-Status: **Phase 3 complete** (1: setup, schema, auth, security · 2: game shell, dashboard · 3: collection, player profiles, comparison). This document is
+Status: **Phase 4 complete** (1: setup, schema, auth, security · 2: game shell, dashboard · 3: collection, profiles, comparison · 4: team builder, squads). This document is
 updated at the end of each phase.
 
 ## 1. Folder structure
@@ -139,6 +139,27 @@ EXECUTE on all `private` functions explicitly and changes the defaults for that 
 fails if `authenticated` can execute anything in `private`, or `anon` anything in `public` except
 `is_username_available`.
 
+## 2d. Team builder and squads (Phase 4)
+
+- **One write path for line-ups.** `save_lineup(team, formation, tactic, captain, slots)` replaces a
+  squad atomically (team row locked) after checking: caller owns the squad and every card, slots
+  0–22 unique, one copy of each player, captain in the starting XI. `create_team` (optional copy of
+  another squad; 5-squad limit) and `delete_team` (never the last; re-activates another) complete
+  the set. Direct client INSERT/UPDATE/DELETE on `team_players` and on lineup columns of `teams` is
+  revoked; only identity columns (name, crest, colours) stay directly editable under RLS.
+- **Rules in pure TypeScript** (`lib/game/lineup.ts`, unit-tested): chemistry per starter =
+  position fit (natural 4 · related 2 · other 0) + club links (1 → 2, 2+ → 3) + nation links
+  (1/2/3+ → 1/2/3), max 10; team chemistry = total ÷ 110 as 0–100, empty slots count 0. Also line
+  ratings (GK/DEF/MID/ATT), `placeCard` (swap / replace / one copy per player), `autoPick` (greedy
+  best effective rating, deterministic) and `validateLineup` (mirrors the RPC's checks).
+- **UI** (`/team`): pitch drawn from `formation_slots` coordinates; drag-and-drop via `@dnd-kit/core`
+  (pointer, touch with a press delay, keyboard) and tap-to-select as an equal alternative; live
+  rating, chemistry and warnings; captain, tactic, formation; unsaved-change guard and a sticky save
+  bar on phones. `/club` manages squads (create/copy, rename, crest template + colours, set active,
+  delete).
+- The builder is keyed by squad id only: after a save the refreshed server state equals local state,
+  so it doesn't remount (remounting dropped the "Line-up saved." confirmation).
+
 ## 3. Database schema
 
 All tables live in `public` with RLS enabled, except `private.audit_log`.
@@ -188,7 +209,7 @@ Planned (each a SECURITY DEFINER RPC called from a server action, one DB transac
 
 | Phase | RPC |
 |---|---|
-| 4 | `save_lineup(team_id, slots[])` — atomic lineup replace + chemistry/overall calc |
+| 4 | ✅ `save_lineup`, `create_team`, `delete_team` (see §2d) |
 | 5 | `buy_card(card_id, idempotency_key)`, `open_pack(pack_id, idempotency_key)` (published odds) |
 | 6 | `upgrade_stadium(category, idempotency_key)` |
 | 7 | `record_match(...)` — server action runs the deterministic engine, RPC persists result + reward |

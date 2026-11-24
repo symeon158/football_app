@@ -120,6 +120,29 @@ test.describe("Football Legends — core journeys", () => {
     await expect(page.getByText("Invalid e-mail or password.")).toBeVisible();
   });
 
+  test("challenge: play another manager's squad; they see the result and can challenge back", async ({ page, browser }) => {
+    const other = await browser.newContext({ baseURL: test.info().project.use.baseURL, viewport: { width: 1440, height: 1500 } });
+    const op = await other.newPage();
+    const { username: opponent } = await signUp(op, "def");
+    const { username: me } = await signUp(page, "chl");
+
+    await page.goto(`/managers/${opponent}`);
+    await page.getByRole("link", { name: `Challenge ${opponent}` }).click();
+    await page.waitForURL(`**/matches/challenge/${opponent}`);
+    await expect(page.getByText("Their starting XI")).toBeVisible();
+    await expect(page.getByText(`Paid matches against ${opponent} today: 5 of 5 left`)).toBeVisible();
+    await page.getByRole("button", { name: /^Challenge / }).click();
+    await page.waitForURL(/\/matches\/[0-9a-f-]{36}\?live=1/);
+    const matchPath = new URL(page.url()).pathname;
+
+    await op.goto("/matches");
+    await expect(op.getByText(`${me} challenged you`).first()).toBeVisible();
+    await op.goto(matchPath);
+    await expect(op.getByText(`${me} challenged your club`)).toBeVisible();
+    await expect(op.getByRole("link", { name: "Challenge back" })).toBeVisible();
+    await other.close();
+  });
+
   test("forgot password: e-mailed link lets the player choose a new password", async ({ page, context }) => {
     const { username, password } = await signUp(page);
     const email = `${username}@example.test`;

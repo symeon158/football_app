@@ -197,17 +197,29 @@ isOneToOne: false
                   ]
                 },"matches": {
                   Row: {
-                    "away_score": number,"completed_at": string | null,"created_at": string,"difficulty": string,"engine_version": string,"home_score": number,"id": string,"idempotency_key": string | null,"opponent_name": string,"opponent_rating": number,"reward_coins": number,"rewarded": boolean,"seed": number,"stats": NonNullable<Json>,"status": Database["public"]['Enums']["match_status"],"tactic": Database["public"]['Enums']["match_tactic"],"team_id": string | null,"team_snapshot": NonNullable<Json>,"user_id": string,"xp_gained": number
+                    "away_score": number,"completed_at": string | null,"created_at": string,"difficulty": string,"engine_version": string,"home_score": number,"id": string,"idempotency_key": string | null,"opponent_name": string,"opponent_rating": number,"opponent_team_id": string | null,"opponent_user_id": string | null,"reward_coins": number,"rewarded": boolean,"seed": number,"stats": NonNullable<Json>,"status": Database["public"]['Enums']["match_status"],"tactic": Database["public"]['Enums']["match_tactic"],"team_id": string | null,"team_snapshot": NonNullable<Json>,"user_id": string,"xp_gained": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "away_score"?: number,"completed_at"?: string | null,"created_at"?: string,"difficulty"?: string,"engine_version": string,"home_score"?: number,"id"?: string,"idempotency_key"?: string | null,"opponent_name": string,"opponent_rating": number,"reward_coins"?: number,"rewarded"?: boolean,"seed": number,"stats"?: NonNullable<Json>,"status"?: Database["public"]['Enums']["match_status"],"tactic": Database["public"]['Enums']["match_tactic"],"team_id"?: string | null,"team_snapshot"?: NonNullable<Json>,"user_id": string,"xp_gained"?: number
+                    "away_score"?: number,"completed_at"?: string | null,"created_at"?: string,"difficulty"?: string,"engine_version": string,"home_score"?: number,"id"?: string,"idempotency_key"?: string | null,"opponent_name": string,"opponent_rating": number,"opponent_team_id"?: string | null,"opponent_user_id"?: string | null,"reward_coins"?: number,"rewarded"?: boolean,"seed": number,"stats"?: NonNullable<Json>,"status"?: Database["public"]['Enums']["match_status"],"tactic": Database["public"]['Enums']["match_tactic"],"team_id"?: string | null,"team_snapshot"?: NonNullable<Json>,"user_id": string,"xp_gained"?: number
                   }
                   Update: {
-                    "away_score"?: number,"completed_at"?: string | null,"created_at"?: string,"difficulty"?: string,"engine_version"?: string,"home_score"?: number,"id"?: string,"idempotency_key"?: string | null,"opponent_name"?: string,"opponent_rating"?: number,"reward_coins"?: number,"rewarded"?: boolean,"seed"?: number,"stats"?: NonNullable<Json>,"status"?: Database["public"]['Enums']["match_status"],"tactic"?: Database["public"]['Enums']["match_tactic"],"team_id"?: string | null,"team_snapshot"?: NonNullable<Json>,"user_id"?: string,"xp_gained"?: number
+                    "away_score"?: number,"completed_at"?: string | null,"created_at"?: string,"difficulty"?: string,"engine_version"?: string,"home_score"?: number,"id"?: string,"idempotency_key"?: string | null,"opponent_name"?: string,"opponent_rating"?: number,"opponent_team_id"?: string | null,"opponent_user_id"?: string | null,"reward_coins"?: number,"rewarded"?: boolean,"seed"?: number,"stats"?: NonNullable<Json>,"status"?: Database["public"]['Enums']["match_status"],"tactic"?: Database["public"]['Enums']["match_tactic"],"team_id"?: string | null,"team_snapshot"?: NonNullable<Json>,"user_id"?: string,"xp_gained"?: number
                   }
                   Relationships: [
                     {
+      foreignKeyName: "matches_opponent_team_id_fkey"
+      columns: ["opponent_team_id"]
+isOneToOne: false
+      referencedRelation: "teams"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "matches_opponent_user_id_fkey"
+      columns: ["opponent_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "matches_team_id_fkey"
       columns: ["team_id"]
 isOneToOne: false
@@ -558,6 +570,11 @@ isOneToOne: false
 "delete_team":
 { Args: { "p_team_id": string }; Returns: undefined
                            },
+"friendly_limits":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "rewarded_per_opponent": number
+            }[]
+                           },
 "get_achievements":
 { Args: Record<PropertyKey, never>; Returns: {
               "badge_icon": string,"claimed": boolean,"claimed_at": string,"code": string,"description": string,"id": string,"metric": string,"progress": number,"reward_coins": number,"reward_xp": number,"target": number,"title": string,"unlocked": boolean
@@ -567,6 +584,9 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: {
               "claimed": boolean,"code": string,"completed": boolean,"description": string,"id": string,"metric": string,"period": Database["public"]['Enums']["challenge_period"],"period_end": string,"period_start": string,"progress": number,"reward_coins": number,"reward_xp": number,"target": number,"title": string
             }[]
+                           },
+"get_friendly_opponent":
+{ Args: { "p_username": string }; Returns: Json
                            },
 "get_leaderboard":
 { Args: { "p_board": string,"p_limit"?: number,"p_period"?: string }; Returns: {

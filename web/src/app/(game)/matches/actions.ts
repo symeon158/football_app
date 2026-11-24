@@ -4,6 +4,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { getFriendlyOpponent } from "@/lib/data/friendly";
 import { getFormations, getSquadCards, getSquads } from "@/lib/data/team";
 import { getStadium } from "@/lib/data/stadium";
 import { DIFFICULTY_OFFSET, generateOpponent } from "@/lib/engine/opponent";
@@ -15,6 +16,7 @@ import { toUserMessage } from "@/lib/errors";
 import { homeBonus } from "@/lib/game/stadium";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserId } from "@/lib/supabase/server";
+import { usernameSchema } from "@/lib/validation/auth";
 import { idempotencyKeySchema } from "@/lib/validation/market";
 
 export type KickoffState = { ok: boolean; message?: string };
@@ -24,6 +26,7 @@ const kickoffSchema = z.object({
   tactic: z.enum(["balanced", "attacking", "defensive"]),
   difficulty: z.enum(["easy", "normal", "hard"]),
   key: idempotencyKeySchema,
+  opponent: usernameSchema.optional(), // friend match: another manager's username
 });
 
 /**
@@ -41,11 +44,13 @@ export async function kickOff(_prev: KickoffState, form: FormData): Promise<Kick
     tactic: form.get("tactic"),
     difficulty: form.get("difficulty"),
     key: form.get("key"),
+    opponent: form.get("opponent") || undefined,
   });
   if (!parsed.success) return { ok: false, message: "Choose a tactic and difficulty, then try again." };
   const userId = await getUserId();
   if (!userId) return { ok: false, message: toUserMessage({ message: "NOT_AUTHENTICATED" }) };
-  const { teamId, tactic, difficulty, key } = parsed.data;
+  const { teamId, tactic, key, opponent } = parsed.data;
+  const difficulty = opponent ? "normal" : parsed.data.difficulty;
 
   const [squads, formations, cards, stadium] = await Promise.all([getSquads(userId), getFormations(), getSquadCards(userId), getStadium(userId)]);
   const squad = squads.find((s) => s.id === teamId);
@@ -55,8 +60,27 @@ export async function kickOff(_prev: KickoffState, form: FormData): Promise<Kick
   if (!built.ok) return { ok: false, message: `Fill all 11 starting places first (${built.missing} empty).` };
 
   const seed = randomSeed();
-  const opponentRating = built.overall + DIFFICULTY_OFFSET[difficulty];
-  const away = generateOpponent(seed, opponentRating);
+  let away, opponentRating, awayChemistry: number | null = null;
+  let friend: { userId: string; teamId: string } | null = null;
+  if (opponent) {
+    // Friend match: the other manager's saved active squad (read via the scouting function).
+    let opp;
+    try {
+      opp = await getFriendlyOpponent(opponent);
+    } catch (e) {
+      return { ok: false, message: toUserMessage(e as Error) };
+    }
+    if (!opp?.squad) return { ok: false, message: toUserMessage({ message: "OPPONENT_NOT_FOUND" }) };
+    const oppBuilt = buildTeamSheet(opp.squad, formations[opp.squad.formation] ?? [], opp.cards, opp.squad.tactic);
+    if (!oppBuilt.ok) return { ok: false, message: toUserMessage({ message: "OPPONENT_NOT_READY" }) };
+    away = oppBuilt.sheet;
+    opponentRating = oppBuilt.overall;
+    awayChemistry = oppBuilt.chemistry;
+    friend = { userId: opp.userId, teamId: opp.squad.id };
+  } else {
+    opponentRating = built.overall + DIFFICULTY_OFFSET[difficulty];
+    away = generateOpponent(seed, opponentRating);
+  }
   const homeBonusPct = homeBonus(stadium.levels, stadium.costs);
   const input = { seed, home: built.sheet, away, homeBonusPct };
   const result = simulateMatch(input);
@@ -68,6 +92,8 @@ export async function kickOff(_prev: KickoffState, form: FormData): Promise<Kick
     difficulty,
     opponent_name: away.name,
     opponent_rating: Math.round(opponentRating),
+    opponent_user_id: friend?.userId ?? null,
+    opponent_team_id: friend?.teamId ?? null,
     home_score: result.score.home,
     away_score: result.score.away,
     // Everything needed to replay and verify the match later.
@@ -81,6 +107,7 @@ export async function kickOff(_prev: KickoffState, form: FormData): Promise<Kick
       homeChemistry: built.chemistry,
       homeBonusPct,
       awayFormation: away.formation,
+      awayChemistry,
       homeFormation: squad.formation,
     },
     events: result.events.map((e) => ({

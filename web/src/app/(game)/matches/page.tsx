@@ -1,4 +1,4 @@
-import { Trophy } from "lucide-react";
+import { Swords, Trophy } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -6,7 +6,9 @@ import { Suspense } from "react";
 import { EmptyState, Panel } from "@/components/dashboard/panel";
 import { Coins } from "@/components/game/coins";
 import { KickoffForm } from "@/components/match/kickoff-form";
+import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getChallengeActivity } from "@/lib/data/friendly";
 import { getMatchCentre } from "@/lib/data/matches";
 import { getViewer } from "@/lib/data/viewer";
 import { cn } from "@/lib/utils";
@@ -33,7 +35,7 @@ const resultOf = (h: number, a: number) =>
 async function MatchesContent() {
   const viewer = await getViewer();
   const now = new Date();
-  const c = await getMatchCentre(viewer.userId, now);
+  const [c, activity] = await Promise.all([getMatchCentre(viewer.userId, now), getChallengeActivity(viewer.userId)]);
   // One key per rendered form: resubmitting the same form can't play twice.
   const idempotencyKey = crypto.randomUUID();
 
@@ -61,6 +63,29 @@ async function MatchesContent() {
       </section>
 
       <div className="space-y-4 sm:space-y-6">
+        <Panel title="Challenge a manager">
+          <p className="text-sm text-muted-foreground">Play your friends&apos; real squads. They don&apos;t need to be online.</p>
+          <Link href="/matches/challenge" className={cn(buttonVariants(), "mt-3 w-full gap-2")}>
+            <Swords className="size-4" /> Find a manager to challenge
+          </Link>
+          {activity.againstMe.length > 0 && (
+            <ul className="mt-3 divide-y border-t text-sm">
+              {activity.againstMe.slice(0, 3).map((m) => (
+                <li key={m.id}>
+                  <Link href={`/matches/${m.id}`} className="flex items-center gap-2 py-2 hover:text-primary">
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="font-semibold">{m.challenger}</span> challenged you
+                    </span>
+                    <span className={cn("font-bold tabular-nums", m.myGoals > m.theirGoals ? "text-primary" : m.myGoals < m.theirGoals ? "text-destructive" : "text-muted-foreground")}>
+                      {m.myGoals}–{m.theirGoals}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
         <Panel title="Season record">
           <dl className="grid grid-cols-4 gap-2 text-center">
             {[["P", c.totals.played], ["W", c.totals.won], ["D", c.totals.drawn], ["L", c.totals.lost]].map(([k, v]) => (
@@ -89,6 +114,7 @@ async function MatchesContent() {
                       <span className="min-w-0 flex-1 truncate">
                         <span className="font-bold tabular-nums">{m.home_score}–{m.away_score}</span>{" "}
                         <span className="text-muted-foreground">vs {m.opponent_name}</span>
+                        {m.opponent_user_id && <span className="ml-1.5 rounded bg-primary/15 px-1 py-px text-[10px] font-semibold uppercase text-primary">Challenge</span>}
                       </span>
                       {m.reward_coins > 0 && <Coins amount={m.reward_coins} className="text-xs text-gold" />}
                     </Link>

@@ -36,6 +36,8 @@ type Props = {
   rewardedLeft: number;
   rewardedPerDay: number;
   playsLeft: number;
+  /** Challenge mode: play this manager's active squad instead of a generated opponent. */
+  challenge?: { username: string; teamName: string; rewardedLeft: number; rewardedPerOpponent: number };
 };
 
 const TACTICS = [
@@ -96,13 +98,15 @@ function RewardAllowance({ left, perDay, hydrated }: { left: number; perDay: num
   );
 }
 
-export function KickoffForm({ squads, idempotencyKey, rewards, goalBonus, goalBonusCap, matchdayIncome, rewardedLeft, rewardedPerDay, playsLeft }: Props) {
+export function KickoffForm({ squads, idempotencyKey, rewards, goalBonus, goalBonusCap, matchdayIncome, rewardedLeft: dailyLeft, rewardedPerDay, playsLeft, challenge }: Props) {
   const [state, action, pending] = useActionState<KickoffState, FormData>(kickOff, { ok: false });
   const hydrated = useHydrated();
   const initial = squads.find((s) => s.isActive) ?? squads[0];
   const [teamId, setTeamId] = useState(initial?.id ?? "");
   const [tactic, setTactic] = useState(initial?.tactic ?? "balanced");
   const [difficulty, setDifficulty] = useState("normal");
+  // In a challenge a match is paid only while both the daily and the per-opponent allowance last.
+  const rewardedLeft = challenge ? Math.min(dailyLeft, challenge.rewardedLeft) : dailyLeft;
   const squad = squads.find((s) => s.id === teamId) ?? initial;
   const reward = (result: string) => rewards.find((r) => r.difficulty === difficulty && r.result === result);
   const canPlay = Boolean(squad?.ready) && playsLeft > 0;
@@ -151,8 +155,15 @@ export function KickoffForm({ squads, idempotencyKey, rewards, goalBonus, goalBo
         </div>
       </fieldset>
 
-      {/* Difficulty */}
-      <fieldset className="space-y-2">
+      {challenge && (
+        <>
+          <input type="hidden" name="opponent" value={challenge.username} />
+          <input type="hidden" name="difficulty" value="normal" />
+        </>
+      )}
+
+      {/* Difficulty (generated opponents only) */}
+      <fieldset className={cn("space-y-2", challenge && "hidden")} disabled={Boolean(challenge)}>
         <legend className="text-sm font-semibold">Opponent</legend>
         <div className="grid grid-cols-3 gap-2">
           {DIFFICULTIES.map(({ value, label, hint }) => (
@@ -184,17 +195,31 @@ export function KickoffForm({ squads, idempotencyKey, rewards, goalBonus, goalBo
             </p>
           </>
         ) : (
-          <p className="text-muted-foreground">No coins or XP from further matches today — they are friendlies.</p>
+          <p className="text-muted-foreground">
+            {challenge && dailyLeft > 0
+              ? `No coins or XP from further matches against ${challenge.username} today — they are friendlies.`
+              : "No coins or XP from further matches today — they are friendlies."}
+          </p>
         )}
       </div>
 
-      <RewardAllowance left={rewardedLeft} perDay={rewardedPerDay} hydrated={hydrated} />
+      <RewardAllowance left={dailyLeft} perDay={rewardedPerDay} hydrated={hydrated} />
+      {challenge && dailyLeft > 0 && (
+        <p className={cn("text-xs", challenge.rewardedLeft > 0 ? "text-muted-foreground" : "font-medium text-gold")}>
+          Paid matches against {challenge.username} today: {challenge.rewardedLeft} of {challenge.rewardedPerOpponent} left
+          (limit per opponent, so friends can&apos;t farm coins off each other).
+        </p>
+      )}
 
       {state.message && !state.ok && <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.message}</p>}
 
       <Button type="submit" size="lg" disabled={!canPlay || pending || !hydrated} className="h-12 w-full gap-2 text-base">
         <Swords className="size-5" />{" "}
-        {pending ? "Kicking off…" : playsLeft <= 0 ? "No matches left today" : rewardedLeft > 0 ? "Kick off" : "Kick off · friendly (no rewards)"}
+        {pending
+          ? "Kicking off…"
+          : playsLeft <= 0
+            ? "No matches left today"
+            : `${challenge ? `Challenge ${challenge.teamName}` : "Kick off"}${rewardedLeft > 0 ? "" : " · friendly (no rewards)"}`}
       </Button>
       {!canPlay && squad?.ready === false && (
         <Link href={`/team?team=${squad.id}`} className={cn(buttonVariants({ variant: "outline" }), "w-full")}>Complete your line-up</Link>

@@ -32,13 +32,16 @@ async function MatchContent({ params, searchParams }: Pick<PageProps<"/matches/[
   const viewer = await getViewer();
   const { id } = await params;
   if (!uuidSchema.safeParse(id).success) notFound();
-  const match = await getMatch(id); // RLS: own matches only
+  const match = await getMatch(id); // RLS: own matches, or challenges against the viewer's club
   if (!match) notFound();
-  const live = (await searchParams).live === "1";
+  const defending = match.user_id !== viewer.userId; // the viewer's club was challenged
+  const live = !defending && (await searchParams).live === "1";
+  const challenger = match.challenger?.username ?? "A manager";
+  const opponentUsername = match.opponent?.username ?? null;
 
   // Level-up banner only for the match that caused it (the latest XP gain).
   const levelBefore = levelForXp(viewer.xp - match.xp_gained);
-  const levelUp = live && match.xp_gained > 0 && viewer.level > levelBefore ? viewer.level : null;
+  const levelUp = !defending && live && match.xp_gained > 0 && viewer.level > levelBefore ? viewer.level : null;
 
   return (
     <>
@@ -52,12 +55,20 @@ async function MatchContent({ params, searchParams }: Pick<PageProps<"/matches/[
         rewards={{ coins: match.reward_coins, xp: match.xp_gained, rewarded: match.rewarded }}
         levelUp={levelUp}
         live={live}
+        defendingAgainst={defending ? challenger : null}
+        challengeOpponent={opponentUsername}
       />
 
       <section aria-label="Match details" className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border bg-card/70 px-4 py-3 text-xs text-muted-foreground">
-        <span className="capitalize">{match.difficulty} · {match.tactic}</span>
+        <span className="capitalize">
+          {defending ? `Challenge from ${challenger}` : opponentUsername ? `Challenge vs ${opponentUsername}` : match.difficulty} · {match.tactic}
+        </span>
         <span>{match.stats.homeFormation} vs {match.stats.awayFormation}</span>
-        <span>Your rating {match.stats.homeOverall} · chemistry {match.stats.homeChemistry} · opponent {match.opponent_rating}</span>
+        {defending ? (
+          <span>Their rating {match.stats.homeOverall} · your club {match.opponent_rating}</span>
+        ) : (
+          <span>Your rating {match.stats.homeOverall} · chemistry {match.stats.homeChemistry} · opponent {match.opponent_rating}</span>
+        )}
         <span>Home advantage +{match.stats.homeBonusPct}%</span>
         {match.verification === "verified" ? (
           <span className="flex items-center gap-1 text-primary" title={`Re-simulated from seed ${match.seed} with engine ${match.engine_version}: identical result`}>
@@ -68,7 +79,17 @@ async function MatchContent({ params, searchParams }: Pick<PageProps<"/matches/[
         ) : (
           <span className="flex items-center gap-1 text-destructive"><ShieldAlert className="size-3.5" /> Replay mismatch</span>
         )}
-        <Link href="/matches" className={cn(buttonVariants({ size: "sm" }), "ml-auto")}>Play again</Link>
+        {defending ? (
+          match.challenger?.username && (
+            <Link href={`/matches/challenge/${encodeURIComponent(match.challenger.username)}`} className={cn(buttonVariants({ size: "sm" }), "ml-auto")}>
+              Challenge back
+            </Link>
+          )
+        ) : opponentUsername ? (
+          <Link href={`/matches/challenge/${encodeURIComponent(opponentUsername)}`} className={cn(buttonVariants({ size: "sm" }), "ml-auto")}>Rematch</Link>
+        ) : (
+          <Link href="/matches" className={cn(buttonVariants({ size: "sm" }), "ml-auto")}>Play again</Link>
+        )}
       </section>
     </>
   );

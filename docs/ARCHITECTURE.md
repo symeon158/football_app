@@ -276,6 +276,22 @@ replay (`data-match-live`) so the reward can't spoil the result.
 - **Test pyramid in CI.** Vitest → pgTAP → SQL↔TS parity → HTTP smoke (game + account) → Playwright
   (desktop journeys + phone overflow/tap) on a real local Supabase stack.
 
+## 2j. Post-launch: password reset and manager challenges
+
+- **Password reset.** `/forgot-password` calls `resetPasswordForEmail` (same reply whether or not the
+  address exists); the e-mailed link signs the player in through `/auth/confirm` and lands on the
+  signed-in-only `/reset-password`. Tested end to end through the local Mailpit inbox.
+- **Challenges (friend matches).** A manager plays another manager's *saved active squad*; the opponent
+  need not be online. `get_friendly_opponent(username)` (SECURITY DEFINER, authenticated) exposes only
+  what a challenger may see: public profile, active formation/tactic/line-up with public card stats and
+  the head-to-head record. The server builds both team sheets with the same `buildTeamSheet` and engine,
+  and `record_match` (still service-role only) stores `opponent_user_id`/`opponent_team_id`.
+  The database forces normal-difficulty rewards, shares the daily allowance and caps paid matches at
+  `friendly_limits().rewarded_per_opponent` (5) per opponent per UTC day against coin farming.
+  RLS lets the opponent read matches against their club; when they delete their account a
+  SECURITY DEFINER trigger renames those matches to "Deleted club" and unlinks them.
+  UI word: *challenge* (a "friendly" remains an unpaid match after the daily allowance).
+
 ## 3. Database schema
 
 All tables live in `public` with RLS enabled, except `private.audit_log`.

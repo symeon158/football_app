@@ -28,6 +28,10 @@ type Props = {
   ratings: Rating[];
   manOfTheMatch: Rating | null;
   rewards: { coins: number; xp: number; rewarded: boolean };
+  /** Set when the viewer's club was the challenged (away) side: the challenger's username. */
+  defendingAgainst?: string | null;
+  /** Set for a challenge the viewer played: the opponent's username (explains the per-opponent cap). */
+  challengeOpponent?: string | null;
   levelUp: number | null;
   live: boolean;
 };
@@ -61,7 +65,7 @@ function describe(e: ViewerEvent) {
   }
 }
 
-export function MatchViewer({ homeName, awayName, events, stats, ratings, manOfTheMatch, rewards, levelUp, live }: Props) {
+export function MatchViewer({ homeName, awayName, events, stats, ratings, manOfTheMatch, rewards, levelUp, live, defendingAgainst, challengeOpponent }: Props) {
   const lastIndex = events.length - 1;
   // Playback = match clock + number of events revealed, advanced together by one pure update.
   const [{ clock, shown }, setPlayback] = useState(live ? { clock: 0, shown: 1 } : { clock: 90, shown: events.length });
@@ -222,7 +226,12 @@ export function MatchViewer({ homeName, awayName, events, stats, ratings, manOfT
 
               <section aria-labelledby="rewards-h" className="rounded-2xl border border-gold/30 bg-gold/5 p-4 sm:p-5">
                 <h2 id="rewards-h" className="mb-2 font-semibold">Rewards</h2>
-                {rewards.rewarded ? (
+                {defendingAgainst ? (
+                  <div className="text-sm">
+                    <p className="font-semibold">{defendingAgainst} challenged your club</p>
+                    <p className="text-muted-foreground">Defending doesn&apos;t pay coins or XP. Challenge them back to earn rewards.</p>
+                  </div>
+                ) : rewards.rewarded ? (
                   <div className="flex flex-wrap items-center gap-4 text-lg font-bold">
                     <Coins amount={rewards.coins} className="text-gold" />
                     <span className="text-primary">+{rewards.xp} XP</span>
@@ -232,7 +241,10 @@ export function MatchViewer({ homeName, awayName, events, stats, ratings, manOfT
                   <div className="text-sm">
                     <p className="font-semibold">No coins or XP: friendly match</p>
                     <p className="text-muted-foreground">
-                      You had already played today&apos;s paid matches. The allowance resets at midnight UTC.
+                      {challengeOpponent
+                        ? `You had already used today's paid matches, or the 5 paid matches against ${challengeOpponent}.`
+                        : "You had already played today's paid matches."}{" "}
+                      The allowance resets at midnight UTC.
                     </p>
                   </div>
                 )}

@@ -1,10 +1,11 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Swords } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { ProfileView } from "@/components/progression/profile-view";
+import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getManagerProfile } from "@/lib/data/progression";
 import { getViewer } from "@/lib/data/viewer";
@@ -32,5 +33,12 @@ async function ManagerContent({ params }: Pick<PageProps<"/managers/[username]">
   const profile = await getManagerProfile(username);
   if (!profile) notFound();
   if (profile.is_me) redirect("/profile");
-  return <ProfileView p={profile} />;
+  return (
+    <>
+      <Link href={`/matches/challenge/${encodeURIComponent(profile.username)}`} className={buttonVariants({ className: "gap-2" })}>
+        <Swords className="size-4" /> Challenge {profile.username}
+      </Link>
+      <ProfileView p={profile} />
+    </>
+  );
 }

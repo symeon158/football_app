@@ -22,6 +22,8 @@ CI (`.github/workflows/ci.yml`) runs every test suite below on each push and pul
 | 7 | Match simulation engine | ✅ done |
 | 8 | Challenges, achievements, leaderboards | ✅ done |
 | 9 | Testing, security review, deployment | ✅ done (deploy steps in docs/DEPLOYMENT.md) |
+| — | Password reset, manager challenges (friend matches) | ✅ done |
+| — | Weekly league, player training, card trading, notifications | planned |
 
 ## Prerequisites
 

@@ -24,7 +24,7 @@ export async function getMatchCentre(userId: string, now: Date) {
     supabase.from("matches").select("rewarded").eq("user_id", userId).gte("created_at", startOfUtcDay(now)),
     supabase
       .from("matches")
-      .select("id, opponent_name, home_score, away_score, difficulty, reward_coins, xp_gained, completed_at")
+      .select("id, opponent_name, opponent_user_id, home_score, away_score, difficulty, reward_coins, xp_gained, completed_at")
       .eq("user_id", userId)
       .eq("status", "completed")
       .order("completed_at", { ascending: false })
@@ -79,7 +79,7 @@ export async function getMatch(matchId: string) {
   const [match, events] = await Promise.all([
     supabase
       .from("matches")
-      .select("id, team_id, team_snapshot, opponent_name, opponent_rating, tactic, difficulty, seed, engine_version, home_score, away_score, stats, reward_coins, xp_gained, rewarded, completed_at")
+      .select("id, user_id, opponent_user_id, team_id, team_snapshot, opponent_name, opponent_rating, tactic, difficulty, seed, engine_version, home_score, away_score, stats, reward_coins, xp_gained, rewarded, completed_at, challenger:profiles!matches_user_id_fkey(username), opponent:profiles!matches_opponent_user_id_fkey(username)")
       .eq("id", matchId)
       .maybeSingle(),
     supabase

@@ -31,6 +31,9 @@ const GAME_ERROR_MESSAGES: Record<string, string> = {
   CHALLENGE_NOT_FOUND: "That challenge isn't available any more.",
   ACHIEVEMENT_NOT_FOUND: "That achievement doesn't exist.",
   INVALID_LEADERBOARD: "That leaderboard doesn't exist.",
+  CANNOT_CHALLENGE_SELF: "You can't challenge your own club.",
+  OPPONENT_NOT_FOUND: "That manager's club isn't available to play right now.",
+  OPPONENT_NOT_READY: "That manager doesn't have a full starting XI yet.",
 };
 
 const DEFAULT_MESSAGE = "Something went wrong. Please try again.";

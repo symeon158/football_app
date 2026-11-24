@@ -175,10 +175,18 @@ export function Challenges({ challenges, now }: { challenges: Dashboard["challen
                   {c.progress}/{c.target}
                 </span>
               </div>
-              {c.endsAt && (
-                <p className="mt-1.5 text-[11px] text-muted-foreground">
-                  Resets in {formatRemaining(c.endsAt.getTime() - now.getTime())}
-                </p>
+              {c.completed && !c.claimed ? (
+                <Link href="/challenges" className="mt-1.5 inline-block text-xs font-semibold text-gold hover:underline">
+                  Ready — claim reward →
+                </Link>
+              ) : c.claimed ? (
+                <p className="mt-1.5 text-[11px] font-medium text-primary">Claimed ✓</p>
+              ) : (
+                c.endsAt && (
+                  <p className="mt-1.5 text-[11px] text-muted-foreground">
+                    Resets in {formatRemaining(c.endsAt.getTime() - now.getTime())}
+                  </p>
+                )
               )}
             </li>
           ))}

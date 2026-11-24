@@ -401,14 +401,14 @@ isOneToOne: false
                   ]
                 },"teams": {
                   Row: {
-                    "captain_ownership_id": string | null,"created_at": string,"formation": Database["public"]['Enums']["formation_code"],"id": string,"is_active": boolean,"logo_template": string,"name": string,"primary_color": string,"secondary_color": string,"tactic": Database["public"]['Enums']["match_tactic"],"updated_at": string,"user_id": string
+                    "captain_ownership_id": string | null,"chemistry_cached": number,"created_at": string,"formation": Database["public"]['Enums']["formation_code"],"id": string,"is_active": boolean,"logo_template": string,"name": string,"overall_cached": number,"primary_color": string,"secondary_color": string,"tactic": Database["public"]['Enums']["match_tactic"],"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "captain_ownership_id"?: string | null,"created_at"?: string,"formation"?: Database["public"]['Enums']["formation_code"],"id"?: string,"is_active"?: boolean,"logo_template"?: string,"name": string,"primary_color"?: string,"secondary_color"?: string,"tactic"?: Database["public"]['Enums']["match_tactic"],"updated_at"?: string,"user_id"?: string
+                    "captain_ownership_id"?: string | null,"chemistry_cached"?: number,"created_at"?: string,"formation"?: Database["public"]['Enums']["formation_code"],"id"?: string,"is_active"?: boolean,"logo_template"?: string,"name": string,"overall_cached"?: number,"primary_color"?: string,"secondary_color"?: string,"tactic"?: Database["public"]['Enums']["match_tactic"],"updated_at"?: string,"user_id"?: string
                   }
                   Update: {
-                    "captain_ownership_id"?: string | null,"created_at"?: string,"formation"?: Database["public"]['Enums']["formation_code"],"id"?: string,"is_active"?: boolean,"logo_template"?: string,"name"?: string,"primary_color"?: string,"secondary_color"?: string,"tactic"?: Database["public"]['Enums']["match_tactic"],"updated_at"?: string,"user_id"?: string
+                    "captain_ownership_id"?: string | null,"chemistry_cached"?: number,"created_at"?: string,"formation"?: Database["public"]['Enums']["formation_code"],"id"?: string,"is_active"?: boolean,"logo_template"?: string,"name"?: string,"overall_cached"?: number,"primary_color"?: string,"secondary_color"?: string,"tactic"?: Database["public"]['Enums']["match_tactic"],"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -546,11 +546,35 @@ isOneToOne: false
             "buy_card":
 { Args: { "p_card_id": string,"p_idempotency_key": string }; Returns: string
                            },
+"claim_achievement":
+{ Args: { "p_achievement_id": string }; Returns: Json
+                           },
+"claim_challenge":
+{ Args: { "p_challenge_id": string }; Returns: Json
+                           },
 "create_team":
 { Args: { "p_copy_from"?: string,"p_logo_template"?: string,"p_name": string,"p_primary_color"?: string,"p_secondary_color"?: string }; Returns: string
                            },
 "delete_team":
 { Args: { "p_team_id": string }; Returns: undefined
+                           },
+"get_achievements":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "badge_icon": string,"claimed": boolean,"claimed_at": string,"code": string,"description": string,"id": string,"metric": string,"progress": number,"reward_coins": number,"reward_xp": number,"target": number,"title": string,"unlocked": boolean
+            }[]
+                           },
+"get_challenges":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "claimed": boolean,"code": string,"completed": boolean,"description": string,"id": string,"metric": string,"period": Database["public"]['Enums']["challenge_period"],"period_end": string,"period_start": string,"progress": number,"reward_coins": number,"reward_xp": number,"target": number,"title": string
+            }[]
+                           },
+"get_leaderboard":
+{ Args: { "p_board": string,"p_limit"?: number,"p_period"?: string }; Returns: {
+              "avatar_key": string,"display_name": string,"is_me": boolean,"level": number,"rank": number,"username": string,"value": number
+            }[]
+                           },
+"get_manager_profile":
+{ Args: { "p_username": string }; Returns: Json
                            },
 "is_username_available":
 { Args: { "p_username": string }; Returns: boolean

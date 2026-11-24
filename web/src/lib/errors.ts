@@ -26,6 +26,11 @@ const GAME_ERROR_MESSAGES: Record<string, string> = {
   MATCH_COOLDOWN: "Catch your breath — you can kick off again in a few seconds.",
   MATCH_DAILY_LIMIT: "That's all the matches for today. Come back tomorrow!",
   INVALID_MATCH: "The match could not be recorded. Please try again.",
+  NOT_COMPLETED: "Not finished yet — keep going!",
+  ALREADY_CLAIMED: "You've already claimed this reward.",
+  CHALLENGE_NOT_FOUND: "That challenge isn't available any more.",
+  ACHIEVEMENT_NOT_FOUND: "That achievement doesn't exist.",
+  INVALID_LEADERBOARD: "That leaderboard doesn't exist.",
 };
 
 const DEFAULT_MESSAGE = "Something went wrong. Please try again.";

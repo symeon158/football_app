@@ -11,6 +11,7 @@ export const PROTECTED_PREFIXES = [
   "/challenges",
   "/leaderboards",
   "/profile",
+  "/managers",
   "/settings",
 ] as const;
 

@@ -13,17 +13,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { initials } from "@/lib/format";
+import { Avatar } from "@/components/game/avatar";
 import { ACCOUNT_NAV } from "@/lib/navigation";
 
-export function UserMenu({ name, username, level }: { name: string; username: string; level: number }) {
+export function UserMenu({ name, username, level, avatarKey }: { name: string; username: string; level: number; avatarKey: string }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Account menu"
-        className="relative flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-emerald-700 text-sm font-bold text-primary-foreground ring-2 ring-background outline-none focus-visible:ring-ring"
+        className="relative flex size-9 items-center justify-center rounded-full ring-2 ring-background outline-none focus-visible:ring-ring"
       >
-        {initials(name)}
+        <Avatar avatarKey={avatarKey} name={name} className="size-9" />
         <span className="absolute -bottom-1 -right-1 rounded-full bg-gold px-1 text-[10px] font-black leading-4 text-black ring-2 ring-background">
           {level}
         </span>

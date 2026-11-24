@@ -1,6 +1,6 @@
 import "server-only";
 
-import { periodEnd, periodStart, type ChallengePeriod } from "@/lib/game/periods";
+import { periodEnd, type ChallengePeriod } from "@/lib/game/periods";
 import { teamOverall, type Position } from "@/lib/game/team-rating";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
@@ -17,10 +17,8 @@ const CARD_FIELDS =
  */
 export async function getDashboard(userId: string, now: Date) {
   const supabase = await createClient();
-  const today = periodStart("daily", now);
-  const week = periodStart("weekly", now);
 
-  const [team, slots, latest, cardCount, rareCount, matches, challenges, progress, stadium, costs] =
+  const [team, slots, latest, cardCount, rareCount, matches, challenges, stadium, costs] =
     await Promise.all([
       supabase
         .from("teams")
@@ -51,17 +49,8 @@ export async function getDashboard(userId: string, now: Date) {
         .eq("status", "completed")
         .order("completed_at", { ascending: false })
         .limit(5),
-      supabase
-        .from("challenges")
-        .select("id, code, title, description, period, target, reward_coins, reward_xp")
-        .in("period", ["daily", "weekly"])
-        .order("period")
-        .order("reward_coins"),
-      supabase
-        .from("user_challenges")
-        .select("challenge_id, period_start, progress, completed_at, claimed_at")
-        .eq("user_id", userId)
-        .in("period_start", [today, week]),
+      // Live progress, derived in the database from matches, cards and squads.
+      supabase.rpc("get_challenges"),
       supabase
         .from("stadiums")
         .select("name, design_template, capacity, stadium_level, seating_level, lighting_level, pitch_level, facilities_level")
@@ -70,7 +59,7 @@ export async function getDashboard(userId: string, now: Date) {
       supabase.from("stadium_upgrade_costs").select("category, level, cost, description"),
     ]);
 
-  const failed = [team, slots, latest, cardCount, rareCount, matches, challenges, progress, stadium, costs].find(
+  const failed = [team, slots, latest, cardCount, rareCount, matches, challenges, stadium, costs].find(
     (r) => r.error,
   );
   if (failed?.error) throw new Error(`Failed to load dashboard: ${failed.error.message}`);
@@ -90,23 +79,12 @@ export async function getDashboard(userId: string, now: Date) {
     }));
 
   // --- Challenges ------------------------------------------------------------
-  const progressByKey = new Map(
-    (progress.data ?? []).map((p) => [`${p.challenge_id}:${p.period_start}`, p]),
-  );
-  const challengeList = (challenges.data ?? []).map((c) => {
-    const period = c.period as ChallengePeriod;
-    const p = progressByKey.get(`${c.id}:${periodStart(period, now)}`);
-    return {
-      ...c,
-      period,
-      progress: Math.min(p?.progress ?? 0, c.target),
-      completed: Boolean(p?.completed_at),
-      claimed: Boolean(p?.claimed_at),
-      endsAt: periodEnd(period, now),
-    };
-  });
-  // Unfinished first, then by period (daily before weekly).
-  challengeList.sort((a, b) => Number(a.completed) - Number(b.completed));
+  const order = (c: { completed: boolean; claimed: boolean }) => (c.completed && !c.claimed ? 0 : !c.completed ? 1 : 2);
+  const challengeList = (challenges.data ?? [])
+    .filter((c) => c.period === "daily" || c.period === "weekly")
+    .map((c) => ({ ...c, period: c.period as ChallengePeriod, endsAt: c.period_end ? new Date(c.period_end) : periodEnd(c.period as ChallengePeriod, now) }))
+    // Ready to claim first, then in progress, claimed last.
+    .sort((a, b) => order(a) - order(b));
 
   // --- Stadium ---------------------------------------------------------------
   const s = stadium.data!;

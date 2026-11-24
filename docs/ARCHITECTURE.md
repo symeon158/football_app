@@ -1,6 +1,6 @@
 # Football Legends — Architecture
 
-Status: **Phase 7 complete** (1: setup, schema, auth, security · 2: shell, dashboard · 3: collection, profiles · 4: team builder · 5: marketplace, packs · 6: stadium · 7: match engine). This document is
+Status: **Phase 8 complete** (1: setup, schema, auth, security · 2: shell, dashboard · 3: collection, profiles · 4: team builder · 5: marketplace, packs · 6: stadium · 7: match engine · 8: challenges, achievements, leaderboards, profiles). This document is
 updated at the end of each phase.
 
 ## 1. Folder structure
@@ -237,6 +237,26 @@ the stadium's home bonus. Calibrated over thousands of matches (`calibrate.test.
 player ratings, man of the match and rewards. The top bar's coins/level are masked during a live
 replay (`data-match-live`) so the reward can't spoil the result.
 
+## 2h. Challenges, achievements, leaderboards, profiles (Phase 8)
+
+- **Progress is derived, not counted.** `private.metric_value(user, metric, from, to)` computes every
+  metric from authoritative data at read time: matches played/won, goals and clean sheets in the
+  period window; cards owned (all / rare+ / legendary+); stadium level; manager level; best squad
+  rating and chemistry. Nothing to drift or tamper with. Periods: daily (UTC day), weekly (ISO week),
+  one-off (team-building, milestones).
+- **Claims** — `claim_challenge` / `claim_achievement` lock the player, verify completion and
+  "not yet claimed", then pay via `private.award` → ledger key `challenge:<id>:<period>` /
+  `achievement:<id>`, so each reward pays once per period. Users cannot write `user_challenges` or
+  `user_achievements` directly.
+- **Squad metrics in SQL.** `teams.overall_cached` / `chemistry_cached` are refreshed by
+  statement-level triggers on `team_players` (and on formation changes) using SQL ports of the
+  TypeScript rules. `parity.integration.test.ts` saves 25 random line-ups through `save_lineup` and
+  asserts SQL == TypeScript exactly.
+- **Leaderboards** (`get_leaderboard`): level/XP, wins, goals (weekly or all-time), team rating, club
+  value; ranks with ties, top N plus the caller's own row. Returns public game identity only.
+- **Profiles** — `get_manager_profile(username)` returns a safe, game-only view (no e-mail) used by
+  `/profile` (editable display name + 12 original avatars) and `/managers/[username]`.
+
 ## 3. Database schema
 
 All tables live in `public` with RLS enabled, except `private.audit_log`.
@@ -290,7 +310,7 @@ Planned (each a SECURITY DEFINER RPC called from a server action, one DB transac
 | 5 | ✅ `buy_card`, `open_pack` (see §2e) |
 | 6 | ✅ `upgrade_stadium` (see §2f) |
 | 7 | ✅ `record_match` (service role only), `match_rewards`, `match_limits`, `level_for_xp` (see §2g) |
-| 8 | `claim_challenge(...)`, `claim_achievement(...)`, leaderboard views |
+| 8 | ✅ `get_challenges`, `claim_challenge`, `get_achievements`, `claim_achievement`, `get_leaderboard`, `get_manager_profile` (see §2h) |
 
 ## 5. Authentication and security
 

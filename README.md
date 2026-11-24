@@ -19,8 +19,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, schema and secu
 | 5 | Coin economy, marketplace, packs | ✅ done |
 | 6 | Stadium builder | ✅ done |
 | 7 | Match simulation engine | ✅ done |
-| 8 | Challenges, achievements, leaderboards | ⏳ next |
-| 9 | Testing, security review, deployment | |
+| 8 | Challenges, achievements, leaderboards | ✅ done |
+| 9 | Testing, security review, deployment | ⏳ next |
 
 ## Prerequisites
 
@@ -48,13 +48,14 @@ Supabase Studio: http://127.0.0.1:54323 · Local e-mail inbox (Mailpit): http://
 ## Tests
 
 ```bash
-npx supabase test db              # pgTAP: provisioning, ledger, RLS, views, privilege audit, squads, marketplace, stadium, matches (repo root)
+npx supabase test db              # pgTAP: provisioning, ledger, RLS, views, privilege audit, squads, marketplace, stadium, matches, progression (repo root)
 uv run pytest                     # Python: catalogue generator              (repo root)
 cd web
 npm test                          # Vitest unit tests
 npm run typecheck && npm run lint
 npm run check:boundaries         # server code must not import constants from "use client" modules
 CALIBRATE=1 npx vitest run src/lib/engine/calibrate.test.ts --silent=false   # engine outcome report
+INTEGRATION=1 npx vitest run src/lib/game/parity.integration.test.ts       # SQL ↔ TS team metrics (needs local stack)
 npm run build && npm run start    # then, in another terminal:
 npm run smoke                     # end-to-end: sign-up → dashboard → every route → tamper attempts
 ```

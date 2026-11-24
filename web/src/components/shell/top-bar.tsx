@@ -38,7 +38,7 @@ async function ViewerStatus() {
       <div className="rounded-full border border-gold/30 bg-gold/10 px-3 py-1.5 text-sm text-gold">
         <Coins amount={viewer.balance} short />
       </div>
-      <UserMenu name={viewer.displayName} username={viewer.username} level={viewer.level} />
+      <UserMenu name={viewer.displayName} username={viewer.username} level={viewer.level} avatarKey={viewer.avatar_key} />
     </div>
   );
 }

@@ -99,7 +99,7 @@ for (const section of ["Latest player cards", "Challenges", "Recent results", "S
 check("dashboard renders 6 player cards", (dashHtml.match(/<article aria-label=/g) ?? []).length === 6);
 check("dashboard lists daily challenges", dashHtml.includes("Daily Victory"));
 
-for (const path of ["/challenges", "/leaderboards", "/profile", "/settings"]) {
+for (const path of ["/settings"]) {
   const res = await get(path);
   const html = await res.text();
   check(`${path} renders for signed-in user`, res.status === 200 && html.includes("Coming soon"), String(res.status));
@@ -276,6 +276,48 @@ const histAfter = await (await get("/marketplace/history")).text();
 check("coin history shows the match reward", histAfter.includes("Match reward"));
 const dashAfter = visibleText(await (await get("/dashboard")).text());
 check("dashboard recent results show the match", dashAfter.includes(`${played.home_score} – ${played.away_score}`) && !dashAfter.includes("No matches played yet"));
+
+// Phase 8: challenges, achievements, leaderboards, profiles
+const chHtml = visibleText(await (await get("/challenges")).text());
+check("challenges page shows live progress from the match", chHtml.includes("Daily challenges") && chHtml.includes("Warm-up") && chHtml.includes("1/2"));
+await new Promise((r) => setTimeout(r, 5500)); // match cooldown
+const centre2 = await (await get("/matches")).text();
+const key2 = centre2.match(/name="key" value="([^"]+)"/)?.[1];
+const kick2 = await submitForm("/matches", { teamId: activeTeam.id, tactic: "balanced", difficulty: "easy", key: key2 });
+check("second match played after the cooldown", [303, 307].includes(kick2.status), String(kick2.status));
+const { data: chs } = await sb.rpc("get_challenges");
+const warmup = chs.find((c) => c.code === "daily_play_2");
+check("Warm-up completed by two matches", warmup?.completed === true && warmup?.progress === 2, JSON.stringify(warmup));
+const balPreClaim = (await sb.from("wallets").select("balance").single()).data.balance;
+const { data: claimed, error: claimErr } = await sb.rpc("claim_challenge", { p_challenge_id: warmup.id });
+const balPostClaim = (await sb.from("wallets").select("balance").single()).data.balance;
+check("claiming pays the reward", !claimErr && balPostClaim === balPreClaim + warmup.reward_coins && claimed.coins === warmup.reward_coins, claimErr?.message);
+const { error: dupClaim } = await sb.rpc("claim_challenge", { p_challenge_id: warmup.id });
+check("a challenge can only be claimed once", dupClaim?.message === "ALREADY_CLAIMED", dupClaim?.message);
+const { data: achs } = await sb.rpc("get_achievements");
+const locked = achs.find((a) => !a.unlocked);
+const { error: lockedErr } = await sb.rpc("claim_achievement", { p_achievement_id: locked.id });
+check("locked achievements cannot be claimed", achs.length === 7 && lockedErr?.message === "NOT_COMPLETED", lockedErr?.message);
+const { error: forgeErr } = await sb.from("user_achievements").insert({ user_id: uid, achievement_id: locked.id, claimed_at: new Date().toISOString() });
+check("achievements cannot be granted directly", Boolean(forgeErr), "insert succeeded!");
+
+const lbHtml = visibleText(await (await get("/leaderboards?board=wins&period=week")).text());
+check("leaderboard shows my rank", /You&#x27;re <span class="font-bold">#\d+<\/span>/.test(lbHtml));
+const { data: board } = await sb.rpc("get_leaderboard", { p_board: "level", p_period: "all", p_limit: 20 });
+const other = board.find((r) => !r.is_me);
+const profHtml = visibleText(await (await get("/profile")).text());
+check("profile page shows my stats and editor", profHtml.includes(`@${user.username}`) && profHtml.includes("Edit profile") && profHtml.includes("W–D–L"));
+const { error: profErr } = await sb.from("profiles").update({ display_name: "Smoke Manager", avatar_key: "avatar-07" }).eq("id", uid);
+check("display name and avatar are editable", !profErr && (await (await get("/profile")).text()).includes("Smoke Manager"), profErr?.message);
+if (other) {
+  const otherHtml = visibleText(await (await get(`/managers/${encodeURIComponent(other.username)}`)).text());
+  check("public manager profile renders without private data", otherHtml.includes(`@${other.username}`) && otherHtml.includes("W–D–L") && !otherHtml.includes("@example.test"));
+}
+const meHtml = await (await get(`/managers/${user.username}`)).text();
+// The redirect happens inside streamed content, so Next emits it as an instruction, not a 3xx.
+check("my own manager page redirects to /profile", meHtml.includes("NEXT_REDIRECT;replace;/profile;"));
+// (Every page embeds Next's not-found fallback, so check for the absence of a profile instead.)
+check("unknown manager shows no profile", !visibleText(await (await get("/managers/no_such_manager_xyz")).text()).includes("W–D–L"));
 
 // 6. Sign out
 const signout = await submitForm("/dashboard", {});

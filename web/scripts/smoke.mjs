@@ -94,7 +94,7 @@ for (const section of ["Latest player cards", "Challenges", "Recent results", "S
 check("dashboard renders 6 player cards", (dashHtml.match(/<article aria-label=/g) ?? []).length === 6);
 check("dashboard lists daily challenges", dashHtml.includes("Daily Victory"));
 
-for (const path of ["/stadium", "/matches", "/challenges", "/leaderboards", "/profile", "/settings"]) {
+for (const path of ["/matches", "/challenges", "/leaderboards", "/profile", "/settings"]) {
   const res = await get(path);
   const html = await res.text();
   check(`${path} renders for signed-in user`, res.status === 200 && html.includes("Coming soon"), String(res.status));
@@ -218,6 +218,28 @@ check("coin history lists purchases", histHtml.includes("Bought player") && hist
 const finalBal = (await sb.from("wallets").select("balance").single()).data.balance;
 const { data: ledger } = await sb.from("coin_transactions").select("amount");
 check("ledger sum equals wallet balance", ledger.reduce((a, r) => a + r.amount, 0) === finalBal);
+
+// Phase 6: stadium builder
+const stHtml = await (await get("/stadium")).text();
+check("stadium page renders upgrades", stHtml.includes("Stadium builder") && stHtml.includes("Construction history") && stHtml.includes("5,000 seats"));
+const balBefore = (await sb.from("wallets").select("balance").single()).data.balance;
+const { data: lightCost } = await sb.from("stadium_upgrade_costs").select("cost").eq("category", "lighting").eq("level", 2).single();
+const upKey = crypto.randomUUID();
+const { data: newLevel, error: upErr } = await sb.rpc("upgrade_stadium", { p_category: "lighting", p_expected_level: 1, p_idempotency_key: upKey });
+const balAfter = (await sb.from("wallets").select("balance").single()).data.balance;
+check("upgrade_stadium raises the level and charges the price", !upErr && newLevel === 2 && balAfter === balBefore - lightCost.cost, upErr?.message ?? `${balBefore} → ${balAfter}`);
+const { data: replayLevel } = await sb.rpc("upgrade_stadium", { p_category: "lighting", p_expected_level: 1, p_idempotency_key: upKey });
+check("replayed upgrade is free", replayLevel === 2 && (await sb.from("wallets").select("balance").single()).data.balance === balAfter);
+const { error: staleErr } = await sb.rpc("upgrade_stadium", { p_category: "lighting", p_expected_level: 1, p_idempotency_key: crypto.randomUUID() });
+check("stale expected level is refused", staleErr?.message === "STADIUM_LEVEL_CHANGED", staleErr?.message);
+const { error: directLvl } = await sb.from("stadiums").update({ seating_level: 5 }).eq("user_id", uid);
+check("stadium levels cannot be set directly", Boolean(directLvl), "update succeeded!");
+const { error: renameErr } = await sb.from("stadiums").update({ name: "Smoke Park", design_template: "fortress" }).eq("user_id", uid);
+// React separates adjacent text nodes with <!-- --> in HTML; users never see them.
+const visibleText = (html) => html.replaceAll("<!-- -->", "");
+const st2 = visibleText(await (await get("/stadium")).text());
+check("rename + design change show on the page", !renameErr && st2.includes("Smoke Park") && st2.includes("Fortress · Level"), renameErr?.message);
+check("construction history lists the upgrade", st2.includes("Lighting</span> 1 → 2"));
 
 // 6. Sign out
 const signout = await submitForm("/dashboard", {});

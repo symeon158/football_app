@@ -569,6 +569,9 @@ isOneToOne: false
                            },
 "set_active_team":
 { Args: { "p_team_id": string }; Returns: undefined
+                           },
+"upgrade_stadium":
+{ Args: { "p_category": Database["public"]['Enums']["stadium_upgrade_category"],"p_expected_level": number,"p_idempotency_key": string }; Returns: number
                            }
           }
           Enums: {

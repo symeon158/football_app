@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
 import { Logo } from "@/components/brand/logo";
@@ -9,7 +10,18 @@ import { levelProgress } from "@/lib/game/progression";
 import { UserMenu } from "./user-menu";
 
 async function ViewerStatus() {
-  const viewer = await getViewer();
+  // The top bar lives in the layout, above every page's error boundary: if
+  // loading the viewer fails (e.g. a database outage), show a neutral
+  // placeholder rather than taking the whole shell down. Next's internal
+  // signals (redirect to /login, prerender bailouts) must still propagate.
+  let viewer;
+  try {
+    viewer = await getViewer();
+  } catch (error) {
+    unstable_rethrow(error);
+    console.error("Top bar: could not load viewer", error);
+    return <ViewerStatusSkeleton />;
+  }
   const progress = levelProgress(viewer.xp, viewer.level);
   return (
     <div className="flex items-center gap-3 sm:gap-4">

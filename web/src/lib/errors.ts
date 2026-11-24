@@ -20,6 +20,9 @@ const GAME_ERROR_MESSAGES: Record<string, string> = {
   PACK_NOT_AVAILABLE: "That pack isn't available.",
   PACK_LIMIT_REACHED: "You've reached today's limit for this pack. Try again tomorrow.",
   INVALID_IDEMPOTENCY_KEY: "That request was malformed. Please try again.",
+  STADIUM_LEVEL_CHANGED: "Your stadium changed in the meantime. Please review the new level and try again.",
+  STADIUM_MAX_LEVEL: "That part of your stadium is already at the maximum level.",
+  STADIUM_NOT_FOUND: "Your stadium could not be found.",
 };
 
 const DEFAULT_MESSAGE = "Something went wrong. Please try again.";

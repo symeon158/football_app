@@ -9,6 +9,13 @@ import { connection } from "next/server";
 import { publicEnv } from "@/lib/env";
 import type { Database } from "@/types/database";
 
+export const SUPABASE_TIMEOUT_MS = 10_000;
+
+function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit) {
+  const timeout = AbortSignal.timeout(SUPABASE_TIMEOUT_MS);
+  return fetch(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout });
+}
+
 /**
  * Supabase client for Server Components, Server Actions and Route Handlers.
  * Acts as the signed-in user, so every query is subject to RLS.
@@ -27,6 +34,10 @@ export async function createClient() {
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     {
+      // Bound every Supabase call so a slow network/backend can never hang a
+      // render: a timed-out read surfaces in the error boundary, and a
+      // timed-out write is safe to retry (purchases/upgrades are idempotent).
+      global: { fetch: fetchWithTimeout },
       cookies: {
         getAll() {
           return cookieStore.getAll();

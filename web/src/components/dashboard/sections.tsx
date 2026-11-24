@@ -11,6 +11,7 @@ import type { Viewer } from "@/lib/data/viewer";
 import { formatNumber } from "@/lib/format";
 import { formatRemaining } from "@/lib/game/periods";
 import { levelProgress } from "@/lib/game/progression";
+import type { StadiumDesign } from "@/lib/game/stadium";
 import { cn } from "@/lib/utils";
 
 import { EmptyState, Meter, Panel } from "./panel";
@@ -247,7 +248,7 @@ export function StadiumStatus({ stadium }: { stadium: Dashboard["stadium"] }) {
   return (
     <Panel title="Stadium" href="/stadium" linkLabel="Upgrade" className="lg:col-span-5">
       <div className="overflow-hidden rounded-xl border bg-gradient-to-b from-slate-950 to-slate-900">
-        <StadiumIllustration levels={levels} title={`${stadium.name}, level ${stadium.level}`} />
+        <StadiumIllustration levels={levels} design={stadium.design as StadiumDesign} title={`${stadium.name}, level ${stadium.level}`} />
       </div>
       <div className="mt-3 flex items-baseline justify-between gap-2">
         <p className="truncate font-semibold">{stadium.name}</p>

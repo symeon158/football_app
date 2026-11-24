@@ -4,7 +4,7 @@ import { Check, PackageOpen, ShoppingCart } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 
-import { buyCard, openPack, type PurchaseResult } from "@/app/(game)/marketplace/actions";
+import { buyCard, openPack } from "@/app/(game)/marketplace/actions";
 import { Coins } from "@/components/game/coins";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,9 +19,9 @@ type Phase = "idle" | "confirm" | "done";
  * double-click or flaky network never charges twice. A new purchase gets a
  * new key.
  */
-function usePurchase(action: (key: string) => Promise<PurchaseResult>) {
+export function usePurchase<R extends { ok: boolean; message?: string }>(action: (key: string) => Promise<R>) {
   const [phase, setPhase] = useState<Phase>("idle");
-  const [result, setResult] = useState<PurchaseResult | null>(null);
+  const [result, setResult] = useState<R | null>(null);
   const [pending, start] = useTransition();
   const key = useRef<string | null>(null);
 

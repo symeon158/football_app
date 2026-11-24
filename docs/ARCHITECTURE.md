@@ -1,6 +1,6 @@
 # Football Legends — Architecture
 
-Status: **Phase 5 complete** (1: setup, schema, auth, security · 2: shell, dashboard · 3: collection, profiles · 4: team builder · 5: marketplace, packs, coin history). This document is
+Status: **Phase 6 complete** (1: setup, schema, auth, security · 2: shell, dashboard · 3: collection, profiles · 4: team builder · 5: marketplace, packs · 6: stadium builder). This document is
 updated at the end of each phase.
 
 ## 1. Folder structure
@@ -179,6 +179,34 @@ fails if `authenticated` can execute anything in `private`, or `anon` anything i
 - Server actions that redirect must `refresh()` first, otherwise the preserved layout (top-bar
   coin balance) stays stale.
 
+## 2f. Stadium builder (Phase 6)
+
+- `upgrade_stadium(category, expected_level, key)` is the only way a level changes: one transaction
+  that locks the stadium row, checks the caller's expected level (`STADIUM_LEVEL_CHANGED` instead of
+  charging for a level the player didn't see), charges through `apply_coin_transaction`, raises the
+  level and logs `stadium_upgrades`. Idempotent per client key. Name and design stay directly
+  editable (column grants); levels are not.
+- Rules in `lib/game/stadium.ts` (tested): capacity table mirrors the generated column; stadium
+  level = floored average; **home advantage** = sum of the reached levels' `bonus_pct` (0–15%);
+  **matchday income** = capacity ÷ 100 FC per home match. Both feed the Phase 7 engine.
+- The illustration grows per category (tiers, floodlights, turf, roof/buildings) in four original
+  designs (classic, modern, bowl, fortress).
+
+### Reliability rules learned in Phase 6 (keep these)
+
+1. **Never import a constant from a `"use client"` module into server code** — the server receives a
+   client *reference*, not the value, with no build or type error. It crashed the stadium history and
+   had silently blanked the compare-page colours since Phase 3. `npm run check:boundaries` enforces it.
+2. **Every game page has an error boundary** (`(game)/error.tsx`, with retry) and the layout's top bar
+   degrades to a placeholder instead of throwing (`unstable_rethrow` keeps redirects/bailouts working).
+   Verified by stopping the REST container: the shell stays, the error page shows, "Try again" recovers.
+3. **Every server-side Supabase request has a 10 s timeout** (`fetchWithTimeout`), so nothing can hang a
+   render; timed-out writes are safe to retry because they are idempotent.
+4. Local-dev note: on Windows + Docker Desktop, requests from the Next server to the local gateway
+   occasionally take several seconds in bursts (measured: time spent waiting for response headers,
+   while Postgres is idle and direct REST calls stay ~100 ms). This explains the sporadic slow loads
+   seen since Phase 3; it is environmental, not application logic.
+
 ## 3. Database schema
 
 All tables live in `public` with RLS enabled, except `private.audit_log`.
@@ -230,7 +258,7 @@ Planned (each a SECURITY DEFINER RPC called from a server action, one DB transac
 |---|---|
 | 4 | ✅ `save_lineup`, `create_team`, `delete_team` (see §2d) |
 | 5 | ✅ `buy_card`, `open_pack` (see §2e) |
-| 6 | `upgrade_stadium(category, idempotency_key)` |
+| 6 | ✅ `upgrade_stadium` (see §2f) |
 | 7 | `record_match(...)` — server action runs the deterministic engine, RPC persists result + reward |
 | 8 | `claim_challenge(...)`, `claim_achievement(...)`, leaderboard views |
 

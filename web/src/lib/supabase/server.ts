@@ -1,8 +1,10 @@
 import "server-only";
 
 import { createServerClient } from "@supabase/ssr";
+import { navigation } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 
 import { publicEnv } from "@/lib/env";
 import type { Database } from "@/types/database";
@@ -12,6 +14,12 @@ import type { Database } from "@/types/database";
  * Acts as the signed-in user, so every query is subject to RLS.
  */
 export async function createClient() {
+  // Never create an auth client during a prerender. createServerClient()
+  // subscribes to auth state, which starts a detached task that calls
+  // Date.now(); inside a prerender phase Next.js rejects that and the
+  // streamed render never completes (observed as pages hanging after the
+  // static shell). connection() guarantees we only run at request time.
+  await connection();
   const env = publicEnv();
   const cookieStore = await cookies();
 
@@ -49,10 +57,13 @@ export async function getUserId(): Promise<string | null> {
 }
 
 /**
- * Authoritative auth check for protected pages and server actions.
+ * Authoritative auth check for protected pages (call from Server Components;
+ * server actions should use getUserId() and handle null themselves).
  * (The proxy's redirect is only an optimistic UX shortcut.)
  */
 export async function requireUserId(): Promise<string> {
+  // Session work happens on navigation, never in (static) prefetches.
+  await navigation();
   const userId = await getUserId();
   if (!userId) redirect("/login");
   return userId;

@@ -129,7 +129,9 @@ export function LatestCards({ cards }: { cards: Dashboard["latestCards"] }) {
         <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0">
           {cards.map((c) => (
             <li key={c.ownershipId} className="w-36 shrink-0 snap-start sm:w-auto">
-              <PlayerCard card={c} />
+              <Link href={`/players/${c.id}`} className="block rounded-2xl outline-none focus-visible:ring-3 focus-visible:ring-ring">
+                <PlayerCard card={c} />
+              </Link>
             </li>
           ))}
         </ul>

@@ -12,7 +12,11 @@ import { cn } from "@/lib/utils";
 
 /** Bottom tab bar for phones/tablets (hidden on large screens). */
 export function MobileNav() {
-  const pathname = usePathname();
+  return <MobileNavView pathname={usePathname()} />;
+}
+
+/** Hook-free (path-wise) view; with pathname "" it is the static, prerenderable fallback. */
+export function MobileNavView({ pathname }: { pathname: string }) {
   const [open, setOpen] = useState(false);
   const tabs = MOBILE_TABS.map(navItem);
   const more = [...MAIN_NAV.filter((i) => !MOBILE_TABS.includes(i.href)), ...ACCOUNT_NAV];

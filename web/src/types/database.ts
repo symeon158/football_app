@@ -35,6 +35,18 @@ export type Database = {
       foreignKeyName: "card_ownership_card_id_fkey"
       columns: ["card_id"]
 isOneToOne: false
+      referencedRelation: "card_catalog"
+      referencedColumns: ["card_id"]
+    },{
+      foreignKeyName: "card_ownership_card_id_fkey"
+      columns: ["card_id"]
+isOneToOne: false
+      referencedRelation: "my_collection"
+      referencedColumns: ["card_id"]
+    },{
+      foreignKeyName: "card_ownership_card_id_fkey"
+      columns: ["card_id"]
+isOneToOne: false
       referencedRelation: "player_cards"
       referencedColumns: ["id"]
     },{
@@ -112,6 +124,12 @@ isOneToOne: false
       referencedRelation: "card_ownership"
       referencedColumns: ["id"]
     },{
+      foreignKeyName: "match_events_assist_ownership_id_fkey"
+      columns: ["assist_ownership_id"]
+isOneToOne: false
+      referencedRelation: "my_collection"
+      referencedColumns: ["ownership_id"]
+    },{
       foreignKeyName: "match_events_match_id_fkey"
       columns: ["match_id"]
 isOneToOne: false
@@ -123,6 +141,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "card_ownership"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "match_events_ownership_id_fkey"
+      columns: ["ownership_id"]
+isOneToOne: false
+      referencedRelation: "my_collection"
+      referencedColumns: ["ownership_id"]
     }
                   ]
                 },"matches": {
@@ -284,6 +308,12 @@ isOneToOne: false
       referencedRelation: "card_ownership"
       referencedColumns: ["id","user_id"]
     },{
+      foreignKeyName: "team_players_ownership_id_user_id_fkey"
+      columns: ["ownership_id","user_id"]
+isOneToOne: false
+      referencedRelation: "my_collection"
+      referencedColumns: ["ownership_id","user_id"]
+    },{
       foreignKeyName: "team_players_team_id_user_id_fkey"
       columns: ["team_id","user_id"]
 isOneToOne: false
@@ -309,6 +339,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "card_ownership"
       referencedColumns: ["id","user_id"]
+    },{
+      foreignKeyName: "teams_captain_owned_fk"
+      columns: ["captain_ownership_id","user_id"]
+isOneToOne: false
+      referencedRelation: "my_collection"
+      referencedColumns: ["ownership_id","user_id"]
     },{
       foreignKeyName: "teams_user_id_fkey"
       columns: ["user_id"]
@@ -392,11 +428,48 @@ isOneToOne: true
                 }
           }
           Views: {
-            [_ in never]: never
+            "card_catalog": {
+                  Row: {
+                    "biography": string,"birth_date": string,"card_id": string,"career_summary": NonNullable<Json>,"club": string,"defending": number,"display_name": string | null,"dribbling": number,"edition": string,"first_name": string,"height_cm": number | null,"image_path": string | null,"is_fictional": boolean,"is_purchasable": boolean,"known_as": string | null,"last_name": string,"market_price": number,"nationality": string,"overall": number,"pace": number,"passing": number,"physicality": number,"player_id": string,"position": Database["public"]['Enums']["player_position"],"preferred_foot": Database["public"]['Enums']["preferred_foot"],"rarity": Database["public"]['Enums']["card_rarity"],"search_name": string | null,"shooting": number,"skill_moves": number,"weak_foot": number
+                  }
+                  ComputedFields: never
+                  Relationships: [
+                    {
+      foreignKeyName: "player_cards_player_id_fkey"
+      columns: ["player_id"]
+isOneToOne: false
+      referencedRelation: "players"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"my_collection": {
+                  Row: {
+                    "acquired_at": string,"acquired_via": Database["public"]['Enums']["acquisition_source"],"card_id": string,"club": string,"defending": number,"display_name": string | null,"dribbling": number,"first_name": string,"image_path": string | null,"is_starter": boolean | null,"known_as": string | null,"last_name": string,"market_price": number,"nationality": string,"overall": number,"ownership_id": string,"pace": number,"passing": number,"physicality": number,"player_id": string,"position": Database["public"]['Enums']["player_position"],"preferred_foot": Database["public"]['Enums']["preferred_foot"],"rarity": Database["public"]['Enums']["card_rarity"],"search_name": string | null,"shooting": number,"skill_moves": number,"upgrade_level": number,"user_id": string,"weak_foot": number
+                  }
+                  ComputedFields: never
+                  Relationships: [
+                    {
+      foreignKeyName: "card_ownership_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "player_cards_player_id_fkey"
+      columns: ["player_id"]
+isOneToOne: false
+      referencedRelation: "players"
+      referencedColumns: ["id"]
+    }
+                  ]
+                }
           }
           Functions: {
             "is_username_available":
 { Args: { "p_username": string }; Returns: boolean
+                           },
+"search_key":
+{ Args: { "p_text": string }; Returns: string
                            },
 "set_active_team":
 { Args: { "p_team_id": string }; Returns: undefined

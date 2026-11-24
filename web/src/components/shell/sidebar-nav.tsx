@@ -6,8 +6,13 @@ import { usePathname } from "next/navigation";
 import { CURRENT_PHASE, isActive, MAIN_NAV } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
+/** Reads the current path (request-time data on dynamic routes — render inside <Suspense>). */
 export function SidebarNav() {
-  const pathname = usePathname();
+  return <SidebarNavView pathname={usePathname()} />;
+}
+
+/** Hook-free view; with pathname "" it is the static, prerenderable fallback. */
+export function SidebarNavView({ pathname }: { pathname: string }) {
   return (
     <nav aria-label="Main" className="flex flex-col gap-1">
       {MAIN_NAV.map(({ href, label, icon: Icon, phase }) => {

@@ -73,6 +73,13 @@ const signup = await submitForm("/signup", user);
 check("sign-up redirects to dashboard", [303, 307].includes(signup.status) &&
   signup.headers.get("location")?.endsWith("/dashboard"), `${signup.status} ${signup.headers.get("location")}`);
 check("session cookie set", [...jar.keys()].some((k) => k.startsWith("sb-")));
+if (![303, 307].includes(signup.status)) {
+  const msg = (await signup.text()).match(/role="alert"[^>]*>([^<]+)</)?.[1] ?? "unknown";
+  console.error(`
+Sign-up failed (${msg}); later checks depend on it, stopping.`);
+  console.error("If this says 'Too many attempts', the local auth rate limit was hit (supabase/config.toml).");
+  process.exit(1);
+}
 
 // 4. Dashboard shows provisioned club
 const dash = await get("/dashboard");
@@ -87,11 +94,35 @@ for (const section of ["Latest player cards", "Challenges", "Recent results", "S
 check("dashboard renders 6 player cards", (dashHtml.match(/<article aria-label=/g) ?? []).length === 6);
 check("dashboard lists daily challenges", dashHtml.includes("Daily Victory"));
 
-for (const path of ["/club", "/collection", "/team", "/stadium", "/marketplace", "/matches", "/challenges", "/leaderboards", "/profile", "/settings"]) {
+for (const path of ["/club", "/team", "/stadium", "/marketplace", "/matches", "/challenges", "/leaderboards", "/profile", "/settings"]) {
   const res = await get(path);
   const html = await res.text();
   check(`${path} renders for signed-in user`, res.status === 200 && html.includes("Coming soon"), String(res.status));
 }
+
+// Phase 3: collection, filters, player profile, comparison
+const colHtml = await (await get("/collection")).text();
+const cardIds = [...new Set([...colHtml.matchAll(/href="\/players\/([0-9a-f-]{36})"/g)].map((m) => m[1]))];
+check("collection shows all 17 starter cards", colHtml.includes("Showing all 17 cards") && cardIds.length >= 16, `${cardIds.length} links`);
+check("collection flags the starting XI", (colHtml.match(/title="In your starting XI"/g) ?? []).length === 11);
+const rareHtml = await (await get("/collection?rarity=rare")).text();
+check("rarity filter narrows results", rareHtml.includes("1 of 17 cards match"));
+const tamperHtml = await (await get("/collection?rarity=mythic&position=XX&page=-3&sort=drop")).text();
+check("tampered filters fall back safely", tamperHtml.includes("Showing all 17 cards"));
+const noneHtml = await (await get("/collection?q=zzzzzz")).text();
+check("search with no match shows empty state", noneHtml.includes("No cards match these filters"));
+const playerHtml = await (await get(`/players/${cardIds[0]}`)).text();
+for (const s of ["Attributes", "Player info", "Biography", "Career", "Market value", "In your collection"]) {
+  check(`player page has "${s}"`, playerHtml.includes(s));
+}
+const missing = await (await get("/players/00000000-0000-4000-8000-000000000000")).text();
+check("unknown player shows not-found", missing.includes("Player not found"));
+const badId = await (await get("/players/not-a-uuid")).text();
+check("malformed player id shows not-found", badId.includes("Player not found"));
+const cmpHtml = await (await get(`/players/compare?ids=${cardIds[0]},${cardIds[1]}`)).text();
+check("compare page renders head-to-head table", cmpHtml.includes("Head to head") && cmpHtml.includes("Overall"));
+const cmpForm = await (await get(`/players/compare?slot=${cardIds[0]}&slot=${cardIds[2]}&slot=`)).text();
+check("compare picker (GET form) works without JS", cmpForm.includes("Head to head"));
 
 const loginWhileSignedIn = await get("/login");
 check("signed-in user is bounced from /login", loginWhileSignedIn.status === 307 &&

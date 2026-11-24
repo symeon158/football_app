@@ -1,6 +1,6 @@
 # Football Legends — Architecture
 
-Status: **Phase 2 complete** (Phase 1: setup, schema, auth, security · Phase 2: game shell, dashboard, responsive UI). This document is
+Status: **Phase 3 complete** (1: setup, schema, auth, security · 2: game shell, dashboard · 3: collection, player profiles, comparison). This document is
 updated at the end of each phase.
 
 ## 1. Folder structure
@@ -19,7 +19,9 @@ football_app/
 │   │   │   ├── ui/                       shadcn/ui primitives (Base UI)
 │   │   │   ├── brand/                    Original logo artwork
 │   │   │   ├── shell/                    Sidebar, mobile tab bar + "More" sheet, top bar, user menu
-│   │   │   ├── game/                     PlayerCard, Crest, Coins, StadiumIllustration (reused by later phases)
+│   │   │   ├── game/                     PlayerCard, TiltCard, Crest, Coins, StadiumIllustration
+│   │   │   ├── collection/               Filter bar (URL-driven)
+│   │   │   ├── players/                  Attribute meters, comparison chart (Recharts)
 │   │   │   └── dashboard/                Dashboard panels
 │   │   ├── lib/
 │   │   │   ├── supabase/                 client.ts (browser), server.ts (RSC/actions),
@@ -99,6 +101,43 @@ Principles
 - **Responsive rules**: grids declare `grid-cols-1` on mobile (a `minmax(0,1fr)` track) so wide
   children like the swipeable card strip cannot widen the page; verified at 390, 820 and 1440 px.
 - Screens from later phases render a "Coming soon" state, so navigation never dead-ends.
+
+## 2c. Cards, collection and profiles (Phase 3)
+
+- **Read models** (`20261124000100_collection_views.sql`): `card_catalog` (card + player bio,
+  flattened) and `my_collection` (owned copies + catalogue + `is_starter`). Both are
+  `security_invoker`, so RLS on the base tables still decides what a caller sees.
+  `public.search_key()` gives accent-insensitive search ("moreirao" finds "Moreirão"), indexed.
+- **Collection** (`/collection`): filters live in the URL (search, position, rarity, nation,
+  sort, page) and are parsed with zod; tampered values fall back to defaults. Works as a plain
+  GET form without JS; with JS, selects apply instantly and search is debounced.
+- **Player profile** (`/players/[id]`): tilting card, attribute *meter list* (one hue — values
+  are magnitudes), info, biography, career table, copies owned.
+- **Compare** (`/players/compare?ids=a,b,c`): Recharts grouped horizontal bars. Series colours
+  are categorical slots 1–3, validated against our surface (CVD ΔE ≥ 9.4, contrast ≥ 3:1), with a
+  legend and a head-to-head table as the accessible data view (best value marked ▲, not colour).
+
+### Framework rules learned in Phase 3 (keep these)
+
+1. **Session work never runs in prefetches.** `(game)/layout.tsx` sets
+   `ensureStatic = "prefetch"` and `requireUserId()` awaits `navigation()`. Without this, every
+   visible `<Link>` triggered a *runtime prefetch* — a full authenticated render with DB queries
+   (~17 per page view) — which queued real navigations behind it.
+2. **Supabase server clients are only created at request time.** `createClient()` awaits
+   `connection()` first. `createServerClient()` starts a detached auth task that calls
+   `Date.now()`; inside a prerender phase Next.js rejects that and the streamed page never
+   finishes (observed as pages stuck after the static shell).
+3. **Path-dependent client UI goes behind `<Suspense>`.** The navs read `usePathname()`, which is
+   request-time data on dynamic routes; they render a static, highlight-free fallback.
+
+### Database privilege hardening
+
+Supabase's global default privileges grant EXECUTE on every new function to `anon` and
+`authenticated` in *every* schema, and a schema-level revoke cannot override them. Phase 3 revokes
+EXECUTE on all `private` functions explicitly and changes the defaults for that schema; every new
+`public` function must revoke from `anon`/`public` itself. `tests/database/04` audits this: it
+fails if `authenticated` can execute anything in `private`, or `anon` anything in `public` except
+`is_username_available`.
 
 ## 3. Database schema
 

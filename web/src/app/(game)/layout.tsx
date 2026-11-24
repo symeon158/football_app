@@ -1,10 +1,20 @@
 import { LogOut } from "lucide-react";
+import { Suspense } from "react";
 
 import { signOut } from "@/app/(auth)/actions";
 import { Logo } from "@/components/brand/logo";
-import { MobileNav } from "@/components/shell/mobile-nav";
-import { SidebarNav } from "@/components/shell/sidebar-nav";
+import { MobileNav, MobileNavView } from "@/components/shell/mobile-nav";
+import { SidebarNav, SidebarNavView } from "@/components/shell/sidebar-nav";
 import { TopBar } from "@/components/shell/top-bar";
+
+/**
+ * Prefetches into the game must come from static output. Every page here is
+ * session-specific; without this, each visible <Link> triggered a runtime
+ * prefetch (a full authenticated server render + DB queries), ~17 per page
+ * view, which queued real navigations behind them. Session content now
+ * renders on navigation, behind each page's <Suspense> fallback.
+ */
+export const ensureStatic = "prefetch";
 
 /**
  * Responsive game shell: sidebar on large screens, bottom tab bar on phones
@@ -18,7 +28,10 @@ export default function GameLayout({ children }: LayoutProps<"/">) {
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-sidebar/70 px-4 py-5 backdrop-blur lg:flex">
         <Logo href="/dashboard" className="px-2" />
         <div className="mt-8 flex-1 overflow-y-auto">
-          <SidebarNav />
+          {/* Active-link highlighting needs the URL, which dynamic routes only know at request time. */}
+          <Suspense fallback={<SidebarNavView pathname="" />}>
+            <SidebarNav />
+          </Suspense>
         </div>
         <form action={signOut} className="mb-3">
           <button
@@ -39,7 +52,9 @@ export default function GameLayout({ children }: LayoutProps<"/">) {
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 pb-28 pt-6 sm:px-6 lg:px-8 lg:pb-10">{children}</main>
       </div>
 
-      <MobileNav />
+      <Suspense fallback={<MobileNavView pathname="" />}>
+        <MobileNav />
+      </Suspense>
     </div>
   );
 }

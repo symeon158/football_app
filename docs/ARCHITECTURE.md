@@ -1,6 +1,6 @@
 # Football Legends — Architecture
 
-Status: **Phase 6 complete** (1: setup, schema, auth, security · 2: shell, dashboard · 3: collection, profiles · 4: team builder · 5: marketplace, packs · 6: stadium builder). This document is
+Status: **Phase 7 complete** (1: setup, schema, auth, security · 2: shell, dashboard · 3: collection, profiles · 4: team builder · 5: marketplace, packs · 6: stadium · 7: match engine). This document is
 updated at the end of each phase.
 
 ## 1. Folder structure
@@ -207,6 +207,36 @@ fails if `authenticated` can execute anything in `private`, or `anon` anything i
    while Postgres is idle and direct REST calls stay ~100 ms). This explains the sporadic slow loads
    seen since Phase 3; it is environmental, not application logic.
 
+## 2g. Match engine (Phase 7)
+
+**Trust boundary.** The engine (`lib/engine/`) runs only on the server. The `kickOff` server action
+identifies the user from the verified session, reads *their* squad/cards/stadium through RLS,
+generates a seed with `crypto`, simulates, and stores the result with `record_match()` — which only
+the **service role** may execute (`createAdminClient`, secret key server-only). Signed-in users
+cannot call it, insert matches, or edit XP. `record_match` itself validates the payload (score must
+equal the goal events, enums, sizes), links events only to cards the user owns, and **decides the
+rewards**: `match_rewards()` (win/draw/loss × difficulty 0.75/1/1.5) + 10 FC per goal (max 50) +
+stadium matchday income; XP → `level_for_xp()` (mirrors `progression.ts`, tested). Limits: 5 s
+cooldown, 60 matches/day, rewards for the first 20/day. Kick-off is idempotent (server-rendered key
+per form), so double submits return the same match.
+
+**Determinism.** `Rng` (mulberry32) is the only source of randomness; `simulateMatch(input)` is pure.
+The full input (both team sheets, seed, home bonus) is stored in `matches.team_snapshot`; every match
+page re-simulates it and shows **Verified replay** when the result is identical. Changing the engine
+means bumping `ENGINE_VERSION`.
+
+**Model.** Per minute: possession from midfield strength (logistic), chance probability from attack ÷
+defence, shot quality (xG), on-target and finishing vs goalkeeper; cards (second yellow → red, rare
+straight reds), up to 3 AI substitutions per side, red cards weaken a side. Inputs: effective ratings
+(out-of-position penalty), formation lines, chemistry (×0.9–1.1), captain (+1%), tactic, and a fifth of
+the stadium's home bonus. Calibrated over thousands of matches (`calibrate.test.ts`): equal teams ≈
+2.6 goals, 37/25/38 W/D/L; +6 rating ≈ 61% wins; maxed stadium ≈ +8 points of win rate; ≈21 shots,
+3.1 yellows, 0.18 reds per match. Tests assert these ranges plus invariants over 300 matches.
+
+**Match screen.** Live-style replay of the stored timeline (clock, score, 1×/4×, skip), then stats,
+player ratings, man of the match and rewards. The top bar's coins/level are masked during a live
+replay (`data-match-live`) so the reward can't spoil the result.
+
 ## 3. Database schema
 
 All tables live in `public` with RLS enabled, except `private.audit_log`.
@@ -259,7 +289,7 @@ Planned (each a SECURITY DEFINER RPC called from a server action, one DB transac
 | 4 | ✅ `save_lineup`, `create_team`, `delete_team` (see §2d) |
 | 5 | ✅ `buy_card`, `open_pack` (see §2e) |
 | 6 | ✅ `upgrade_stadium` (see §2f) |
-| 7 | `record_match(...)` — server action runs the deterministic engine, RPC persists result + reward |
+| 7 | ✅ `record_match` (service role only), `match_rewards`, `match_limits`, `level_for_xp` (see §2g) |
 | 8 | `claim_challenge(...)`, `claim_achievement(...)`, leaderboard views |
 
 ## 5. Authentication and security

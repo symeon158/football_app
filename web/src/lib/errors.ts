@@ -23,6 +23,9 @@ const GAME_ERROR_MESSAGES: Record<string, string> = {
   STADIUM_LEVEL_CHANGED: "Your stadium changed in the meantime. Please review the new level and try again.",
   STADIUM_MAX_LEVEL: "That part of your stadium is already at the maximum level.",
   STADIUM_NOT_FOUND: "Your stadium could not be found.",
+  MATCH_COOLDOWN: "Catch your breath — you can kick off again in a few seconds.",
+  MATCH_DAILY_LIMIT: "That's all the matches for today. Come back tomorrow!",
+  INVALID_MATCH: "The match could not be recorded. Please try again.",
 };
 
 const DEFAULT_MESSAGE = "Something went wrong. Please try again.";

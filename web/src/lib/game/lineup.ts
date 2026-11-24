@@ -78,7 +78,7 @@ export function chemistry(starters: Starter[]) {
 
 /* ------------------------------------------------------------ line ratings */
 
-const LINE_OF: Record<Position, "GK" | "DEF" | "MID" | "ATT"> = {
+export const LINE_OF: Record<Position, "GK" | "DEF" | "MID" | "ATT"> = {
   GK: "GK", CB: "DEF", LB: "DEF", RB: "DEF",
   CDM: "MID", CM: "MID", CAM: "MID", LM: "MID", RM: "MID",
   LW: "ATT", RW: "ATT", ST: "ATT",

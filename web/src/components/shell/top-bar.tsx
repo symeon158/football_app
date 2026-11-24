@@ -24,7 +24,8 @@ async function ViewerStatus() {
   }
   const progress = levelProgress(viewer.xp, viewer.level);
   return (
-    <div className="flex items-center gap-3 sm:gap-4">
+    // Hidden during a live match replay (see MatchViewer) so it can't spoil the result.
+    <div className="flex items-center gap-3 transition-opacity sm:gap-4 [[data-match-live]_&]:invisible">
       <div className="hidden min-w-32 sm:block" title={`${viewer.xp} XP`}>
         <div className="flex justify-between text-[11px] font-medium text-muted-foreground">
           <span>Level {viewer.level}</span>

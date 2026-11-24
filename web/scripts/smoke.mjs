@@ -50,6 +50,11 @@ async function submitForm(path, fields) {
   for (const m of html.matchAll(/<input type="hidden" name="(\$ACTION[^"]*)"(?: value="([^"]*)")?/g)) {
     form.append(m[1], decode(m[2] ?? ""));
   }
+  // Other server-rendered hidden fields (e.g. the kick-off idempotency key), unless overridden.
+  for (const m of html.matchAll(/<input type="hidden" name="([a-zA-Z][\w-]*)" value="([^"]*)"/g)) {
+    if (!(m[1] in fields)) form.append(m[1], decode(m[2]));
+  }
+  form.lastHtml = html;
   for (const [k, v] of Object.entries(fields)) form.append(k, v);
   return get(path, { method: "POST", body: form, headers: { cookie: cookieHeader() } });
 }
@@ -94,7 +99,7 @@ for (const section of ["Latest player cards", "Challenges", "Recent results", "S
 check("dashboard renders 6 player cards", (dashHtml.match(/<article aria-label=/g) ?? []).length === 6);
 check("dashboard lists daily challenges", dashHtml.includes("Daily Victory"));
 
-for (const path of ["/matches", "/challenges", "/leaderboards", "/profile", "/settings"]) {
+for (const path of ["/challenges", "/leaderboards", "/profile", "/settings"]) {
   const res = await get(path);
   const html = await res.text();
   check(`${path} renders for signed-in user`, res.status === 200 && html.includes("Coming soon"), String(res.status));
@@ -240,6 +245,37 @@ const visibleText = (html) => html.replaceAll("<!-- -->", "");
 const st2 = visibleText(await (await get("/stadium")).text());
 check("rename + design change show on the page", !renameErr && st2.includes("Smoke Park") && st2.includes("Fortress · Level"), renameErr?.message);
 check("construction history lists the upgrade", st2.includes("Lighting</span> 1 → 2"));
+
+// Phase 7: match engine
+const centre = await (await get("/matches")).text();
+check("Match Centre renders the kick-off form", centre.includes("Kick off") && centre.includes("Rewards") && centre.includes("Season record"));
+const keyMatch = centre.match(/name="key" value="([^"]+)"/);
+check("kick-off form carries a server-rendered idempotency key", Boolean(keyMatch));
+const { data: activeTeam } = await sb.from("teams").select("id").eq("is_active", true).single();
+const balBeforeMatch = (await sb.from("wallets").select("balance").single()).data.balance;
+const kick = await submitForm("/matches", { teamId: activeTeam.id, tactic: "attacking", difficulty: "easy", key: keyMatch[1] });
+const matchUrl = kick.headers.get("location") ?? "";
+const matchId = matchUrl.match(/\/matches\/([0-9a-f-]{36})/)?.[1];
+check("kick-off plays a match and redirects to it", [303, 307].includes(kick.status) && Boolean(matchId), `${kick.status} ${matchUrl}`);
+const { data: played } = await sb.from("matches").select("home_score, away_score, reward_coins, xp_gained, difficulty, tactic, seed, engine_version").eq("id", matchId).single();
+const { count: evCount } = await sb.from("match_events").select("seq", { count: "exact", head: true }).eq("match_id", matchId);
+check("match stored with events, server rewards and settings", played?.difficulty === "easy" && played?.tactic === "attacking" && played.reward_coins > 0 && evCount >= 3,
+  JSON.stringify(played));
+const balAfterMatch = (await sb.from("wallets").select("balance").single()).data.balance;
+check("match reward paid into the wallet", balAfterMatch === balBeforeMatch + played.reward_coins, `${balBeforeMatch} → ${balAfterMatch} (+${played.reward_coins})`);
+const matchHtml = visibleText(await (await get(`/matches/${matchId}`)).text());
+check("match page shows a verified, reproducible replay", matchHtml.includes("Verified replay") && matchHtml.includes(`${played.home_score} – ${played.away_score}`));
+const again = await submitForm("/matches", { teamId: activeTeam.id, tactic: "attacking", difficulty: "easy", key: keyMatch[1] });
+check("resubmitting the same form returns the same match", (again.headers.get("location") ?? "").includes(matchId), again.headers.get("location"));
+check("resubmission is not paid twice", (await sb.from("wallets").select("balance").single()).data.balance === balAfterMatch);
+const quick = await submitForm("/matches", { teamId: activeTeam.id, tactic: "balanced", difficulty: "normal" });
+check("cooldown blocks an instant second kick-off", quick.status === 200 && (await quick.text()).includes("Catch your breath"));
+const { error: cheatErr } = await sb.rpc("record_match", { p_user_id: uid, p_team_id: activeTeam.id, p_idempotency_key: "cheat-0000001", p_payload: { home_score: 9, away_score: 0 } });
+check("players cannot call record_match", Boolean(cheatErr), "call succeeded!");
+const histAfter = await (await get("/marketplace/history")).text();
+check("coin history shows the match reward", histAfter.includes("Match reward"));
+const dashAfter = visibleText(await (await get("/dashboard")).text());
+check("dashboard recent results show the match", dashAfter.includes(`${played.home_score} – ${played.away_score}`) && !dashAfter.includes("No matches played yet"));
 
 // 6. Sign out
 const signout = await submitForm("/dashboard", {});

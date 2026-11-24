@@ -2,8 +2,6 @@ import { shortName } from "@/lib/format";
 import { GK_STAT_LABELS, OUTFIELD_STAT_LABELS, RARITY_STYLE, type Rarity } from "@/lib/game/rarity";
 import { cn } from "@/lib/utils";
 
-import { PlayerFace } from "./player-face";
-
 export type PlayerCardData = {
   rarity: Rarity;
   position: string;
@@ -63,11 +61,11 @@ export function PlayerCard({ card, className, captain }: { card: PlayerCardData;
           )}
         </header>
 
-        {/* original generated portrait (fictional players only — real likenesses need licences) */}
-        <PlayerFace
-          seed={`${card.player.first_name} ${card.player.last_name}`}
-          className="relative mx-auto -mt-[9%] h-[46%] w-auto drop-shadow-[0_6px_8px_rgb(0_0_0/0.35)]"
-        />
+        {/* original generic silhouette — real likenesses only with licences */}
+        <svg aria-hidden viewBox="0 0 64 56" className="relative mx-auto mt-[2%] h-[30%] w-auto opacity-75">
+          <circle cx="32" cy="18" r="12" className="fill-current opacity-60" />
+          <path d="M6 56c0-14 11.6-24 26-24s26 10 26 24Z" className="fill-current opacity-60" />
+        </svg>
 
         <div className="relative mt-auto px-[9%] pb-[8%]">
           <p className="truncate border-b border-current/20 pb-1 text-center text-[clamp(0.7rem,9cqw,0.95rem)] font-bold">

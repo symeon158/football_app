@@ -94,7 +94,7 @@ for (const section of ["Latest player cards", "Challenges", "Recent results", "S
 check("dashboard renders 6 player cards", (dashHtml.match(/<article aria-label=/g) ?? []).length === 6);
 check("dashboard lists daily challenges", dashHtml.includes("Daily Victory"));
 
-for (const path of ["/stadium", "/marketplace", "/matches", "/challenges", "/leaderboards", "/profile", "/settings"]) {
+for (const path of ["/stadium", "/matches", "/challenges", "/leaderboards", "/profile", "/settings"]) {
   const res = await get(path);
   const html = await res.text();
   check(`${path} renders for signed-in user`, res.status === 200 && html.includes("Coming soon"), String(res.status));
@@ -184,6 +184,40 @@ const { error: delErr } = await sb.rpc("delete_team", { p_team_id: newTeamId });
 check("delete_team removes it", !delErr, delErr?.message);
 const { error: lastErr } = await sb.rpc("delete_team", { p_team_id: myTeam.id });
 check("cannot delete the last squad", lastErr?.message === "LAST_TEAM", lastErr?.message);
+
+// Phase 5: marketplace, packs, coin history
+const mktHtml = await (await get("/marketplace")).text();
+check("marketplace lists players for sale", /\d+ players for sale/.test(mktHtml) && mktHtml.includes("Transfer market"));
+const highHtml = await (await get("/marketplace?min=85")).text();
+const highRatings = [...highHtml.matchAll(/aria-label="[^"]*, (\d+) rated /g)].map((m) => Number(m[1]));
+check("min-rating filter only shows 85+", highRatings.length > 0 && highRatings.every((r) => r >= 85), highRatings.join(","));
+
+const { data: cheapest } = await sb.from("card_catalog").select("card_id, market_price").eq("is_purchasable", true).order("market_price").limit(1).single();
+const key = crypto.randomUUID();
+const before = (await sb.from("wallets").select("balance").single()).data.balance;
+const { data: own1, error: buyErr } = await sb.rpc("buy_card", { p_card_id: cheapest.card_id, p_idempotency_key: key });
+const afterBuy = (await sb.from("wallets").select("balance").single()).data.balance;
+check("buy_card charges the market price", !buyErr && afterBuy === before - cheapest.market_price, buyErr?.message ?? `${before} → ${afterBuy}`);
+const { data: own2 } = await sb.rpc("buy_card", { p_card_id: cheapest.card_id, p_idempotency_key: key });
+const afterReplay = (await sb.from("wallets").select("balance").single()).data.balance;
+check("replayed purchase is free and returns the same card", own2 === own1 && afterReplay === afterBuy);
+const { data: icon } = await sb.from("card_catalog").select("card_id").eq("rarity", "icon").limit(1).single();
+const { error: poorErr } = await sb.rpc("buy_card", { p_card_id: icon.card_id, p_idempotency_key: crypto.randomUUID() });
+check("cannot buy what you can't afford", poorErr?.message === "INSUFFICIENT_FUNDS", poorErr?.message);
+
+const packsHtml = await (await get("/marketplace/packs")).text();
+check("packs page publishes odds", packsHtml.includes("Odds per card") && packsHtml.includes("80%") && packsHtml.includes("Guaranteed"));
+const { data: bronze } = await sb.from("card_packs").select("id").eq("code", "bronze").single();
+const { data: openingId, error: packErr } = await sb.rpc("open_pack", { p_pack_id: bronze.id, p_idempotency_key: crypto.randomUUID() });
+check("open_pack opens a bronze pack", !packErr && Boolean(openingId), packErr?.message);
+const revealHtml = await (await get(`/marketplace/packs/${openingId}`)).text();
+check("reveal page shows 3 face-down cards", revealHtml.includes("Bronze Pack") && (revealHtml.match(/aria-label="(Reveal next card|Face-down card)"/g) ?? []).length === 3);
+check("unknown pack opening is not found", (await (await get("/marketplace/packs/00000000-0000-4000-8000-000000000000")).text()).includes("could not be found"));
+const histHtml = await (await get("/marketplace/history")).text();
+check("coin history lists purchases", histHtml.includes("Bought player") && histHtml.includes("Opened pack") && histHtml.includes("Welcome bonus"));
+const finalBal = (await sb.from("wallets").select("balance").single()).data.balance;
+const { data: ledger } = await sb.from("coin_transactions").select("amount");
+check("ledger sum equals wallet balance", ledger.reduce((a, r) => a + r.amount, 0) === finalBal);
 
 // 6. Sign out
 const signout = await submitForm("/dashboard", {});

@@ -1,6 +1,6 @@
 # Football Legends — Architecture
 
-Status: **Phase 4 complete** (1: setup, schema, auth, security · 2: game shell, dashboard · 3: collection, profiles, comparison · 4: team builder, squads). This document is
+Status: **Phase 5 complete** (1: setup, schema, auth, security · 2: shell, dashboard · 3: collection, profiles · 4: team builder · 5: marketplace, packs, coin history). This document is
 updated at the end of each phase.
 
 ## 1. Folder structure
@@ -160,6 +160,25 @@ fails if `authenticated` can execute anything in `private`, or `anon` anything i
 - The builder is keyed by squad id only: after a save the refreshed server state equals local state,
   so it doesn't remount (remounting dropped the "Line-up saved." confirmation).
 
+## 2e. Economy, marketplace and packs (Phase 5)
+
+- **Purchases are single DB transactions.** `buy_card(card, key)` and `open_pack(pack, key)` charge
+  through `private.apply_coin_transaction` and grant cards in the same transaction. Price,
+  balance, availability, a 500-card collection cap and per-pack daily limits are decided in the
+  database; the server actions only validate input shape.
+- **Idempotent by design.** The client creates one key per purchase *intent* (reused on retry).
+  The ledger's `unique(user_id, idempotency_key)` plus `card_ownership.coin_transaction_id unique`
+  and `pack_openings.coin_transaction_id unique` mean a double-click, replay or concurrent duplicate
+  returns the original result and is never charged twice (verified via the real UI by
+  double-clicking Confirm).
+- **Transparent odds.** `card_pack_odds` (basis points, sum = 10,000 per pack — tested) is both shown
+  on the Packs page and read by `private.draw_rarity`; a pgTAP test checks 20,000 draws against the
+  published odds. Each pack's guarantee applies to its first card. Coins are earned only through
+  play; there are no real-money purchases.
+- **History.** `/marketplace/history` renders the append-only ledger with readable descriptions.
+- Server actions that redirect must `refresh()` first, otherwise the preserved layout (top-bar
+  coin balance) stays stale.
+
 ## 3. Database schema
 
 All tables live in `public` with RLS enabled, except `private.audit_log`.
@@ -210,7 +229,7 @@ Planned (each a SECURITY DEFINER RPC called from a server action, one DB transac
 | Phase | RPC |
 |---|---|
 | 4 | ✅ `save_lineup`, `create_team`, `delete_team` (see §2d) |
-| 5 | `buy_card(card_id, idempotency_key)`, `open_pack(pack_id, idempotency_key)` (published odds) |
+| 5 | ✅ `buy_card`, `open_pack` (see §2e) |
 | 6 | `upgrade_stadium(category, idempotency_key)` |
 | 7 | `record_match(...)` — server action runs the deterministic engine, RPC persists result + reward |
 | 8 | `claim_challenge(...)`, `claim_achievement(...)`, leaderboard views |

@@ -21,14 +21,14 @@ export type Database = {
                   ]
                 },"card_ownership": {
                   Row: {
-                    "acquired_at": string,"acquired_via": Database["public"]['Enums']["acquisition_source"],"card_id": string,"id": string,"upgrade_level": number,"user_id": string
+                    "acquired_at": string,"acquired_via": Database["public"]['Enums']["acquisition_source"],"card_id": string,"coin_transaction_id": number | null,"id": string,"pack_opening_id": string | null,"pack_position": number | null,"upgrade_level": number,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "acquired_at"?: string,"acquired_via": Database["public"]['Enums']["acquisition_source"],"card_id": string,"id"?: string,"upgrade_level"?: number,"user_id": string
+                    "acquired_at"?: string,"acquired_via": Database["public"]['Enums']["acquisition_source"],"card_id": string,"coin_transaction_id"?: number | null,"id"?: string,"pack_opening_id"?: string | null,"pack_position"?: number | null,"upgrade_level"?: number,"user_id": string
                   }
                   Update: {
-                    "acquired_at"?: string,"acquired_via"?: Database["public"]['Enums']["acquisition_source"],"card_id"?: string,"id"?: string,"upgrade_level"?: number,"user_id"?: string
+                    "acquired_at"?: string,"acquired_via"?: Database["public"]['Enums']["acquisition_source"],"card_id"?: string,"coin_transaction_id"?: number | null,"id"?: string,"pack_opening_id"?: string | null,"pack_position"?: number | null,"upgrade_level"?: number,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -50,12 +50,58 @@ isOneToOne: false
       referencedRelation: "player_cards"
       referencedColumns: ["id"]
     },{
+      foreignKeyName: "card_ownership_coin_transaction_id_fkey"
+      columns: ["coin_transaction_id"]
+isOneToOne: true
+      referencedRelation: "coin_transactions"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "card_ownership_pack_opening_id_fkey"
+      columns: ["pack_opening_id"]
+isOneToOne: false
+      referencedRelation: "pack_openings"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "card_ownership_user_id_fkey"
       columns: ["user_id"]
 isOneToOne: false
       referencedRelation: "profiles"
       referencedColumns: ["id"]
     }
+                  ]
+                },"card_pack_odds": {
+                  Row: {
+                    "pack_id": string,"rarity": Database["public"]['Enums']["card_rarity"],"weight": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "pack_id": string,"rarity": Database["public"]['Enums']["card_rarity"],"weight": number
+                  }
+                  Update: {
+                    "pack_id"?: string,"rarity"?: Database["public"]['Enums']["card_rarity"],"weight"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "card_pack_odds_pack_id_fkey"
+      columns: ["pack_id"]
+isOneToOne: false
+      referencedRelation: "card_packs"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"card_packs": {
+                  Row: {
+                    "cards_per_pack": number,"code": string,"created_at": string,"daily_limit": number,"description": string,"guaranteed_rarity": Database["public"]['Enums']["card_rarity"] | null,"id": string,"is_active": boolean,"name": string,"price": number,"sort_order": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "cards_per_pack": number,"code": string,"created_at"?: string,"daily_limit"?: number,"description": string,"guaranteed_rarity"?: Database["public"]['Enums']["card_rarity"] | null,"id"?: string,"is_active"?: boolean,"name": string,"price": number,"sort_order"?: number
+                  }
+                  Update: {
+                    "cards_per_pack"?: number,"code"?: string,"created_at"?: string,"daily_limit"?: number,"description"?: string,"guaranteed_rarity"?: Database["public"]['Enums']["card_rarity"] | null,"id"?: string,"is_active"?: boolean,"name"?: string,"price"?: number,"sort_order"?: number
+                  }
+                  Relationships: [
+                    
                   ]
                 },"challenges": {
                   Row: {
@@ -169,6 +215,38 @@ isOneToOne: false
       referencedColumns: ["id"]
     },{
       foreignKeyName: "matches_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"pack_openings": {
+                  Row: {
+                    "coin_transaction_id": number,"created_at": string,"id": string,"pack_id": string,"price_paid": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "coin_transaction_id": number,"created_at"?: string,"id"?: string,"pack_id": string,"price_paid": number,"user_id": string
+                  }
+                  Update: {
+                    "coin_transaction_id"?: number,"created_at"?: string,"id"?: string,"pack_id"?: string,"price_paid"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "pack_openings_coin_transaction_id_fkey"
+      columns: ["coin_transaction_id"]
+isOneToOne: true
+      referencedRelation: "coin_transactions"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "pack_openings_pack_id_fkey"
+      columns: ["pack_id"]
+isOneToOne: false
+      referencedRelation: "card_packs"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "pack_openings_user_id_fkey"
       columns: ["user_id"]
 isOneToOne: false
       referencedRelation: "profiles"
@@ -465,7 +543,10 @@ isOneToOne: false
                 }
           }
           Functions: {
-            "create_team":
+            "buy_card":
+{ Args: { "p_card_id": string,"p_idempotency_key": string }; Returns: string
+                           },
+"create_team":
 { Args: { "p_copy_from"?: string,"p_logo_template"?: string,"p_name": string,"p_primary_color"?: string,"p_secondary_color"?: string }; Returns: string
                            },
 "delete_team":
@@ -473,6 +554,12 @@ isOneToOne: false
                            },
 "is_username_available":
 { Args: { "p_username": string }; Returns: boolean
+                           },
+"open_pack":
+{ Args: { "p_idempotency_key": string,"p_pack_id": string }; Returns: string
+                           },
+"rarity_rank":
+{ Args: { "p": Database["public"]['Enums']["card_rarity"] }; Returns: number
                            },
 "save_lineup":
 { Args: { "p_captain": string,"p_formation": Database["public"]['Enums']["formation_code"],"p_slots": Json,"p_tactic": Database["public"]['Enums']["match_tactic"],"p_team_id": string }; Returns: undefined

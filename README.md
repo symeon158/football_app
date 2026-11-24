@@ -16,8 +16,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, schema and secu
 | 2 | Dashboard and responsive game UI | ✅ done |
 | 3 | Player cards, collection, player profiles | ✅ done |
 | 4 | Team builder and formations | ✅ done |
-| 5 | Coin economy, marketplace, packs | ⏳ next |
-| 6 | Stadium builder | |
+| 5 | Coin economy, marketplace, packs | ✅ done |
+| 6 | Stadium builder | ⏳ next |
 | 7 | Match simulation engine | |
 | 8 | Challenges, achievements, leaderboards | |
 | 9 | Testing, security review, deployment | |
@@ -48,7 +48,7 @@ Supabase Studio: http://127.0.0.1:54323 · Local e-mail inbox (Mailpit): http://
 ## Tests
 
 ```bash
-npx supabase test db              # pgTAP: provisioning, ledger, RLS, views, privilege audit, squads (repo root)
+npx supabase test db              # pgTAP: provisioning, ledger, RLS, views, privilege audit, squads, marketplace (repo root)
 uv run pytest                     # Python: catalogue generator              (repo root)
 cd web
 npm test                          # Vitest unit tests

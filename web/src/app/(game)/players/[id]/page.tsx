@@ -8,6 +8,7 @@ import { Panel } from "@/components/dashboard/panel";
 import { Coins } from "@/components/game/coins";
 import { PlayerCard } from "@/components/game/player-card";
 import { TiltCard } from "@/components/game/tilt-card";
+import { BuyButton } from "@/components/market/purchase-buttons";
 import { AttributeMeters, Stars } from "@/components/players/attribute-meters";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -90,6 +91,10 @@ async function PlayerContent({ params }: Pick<PageProps<"/players/[id]">, "param
             </span>
           </div>
         </div>
+
+        {card.is_purchasable && (
+          <BuyButton cardId={card.card_id} name={card.display_name ?? "this player"} price={card.market_price ?? 0} balance={viewer.balance} />
+        )}
 
         <Link href={`/players/compare?ids=${card.card_id}`} className={cn(buttonVariants({ variant: "outline" }), "w-full gap-2")}>
           <GitCompareArrows className="size-4" /> Compare with…

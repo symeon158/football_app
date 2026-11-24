@@ -6,17 +6,30 @@ import { useEffect, useRef, useState, useTransition } from "react";
 
 import { RARITY_STYLE } from "@/lib/game/rarity";
 import { cn } from "@/lib/utils";
-import {
-  filtersToQuery,
-  POSITIONS,
-  RARITY_VALUES,
-  SORTS,
-  type CollectionFilters as Filters,
-} from "@/lib/validation/collection";
+import { filtersToQuery, POSITIONS, RARITY_VALUES, SORTS, type CollectionFilters } from "@/lib/validation/collection";
+import { MARKET_SORTS, marketFiltersToQuery, MIN_RATINGS, type MarketFilters } from "@/lib/validation/market";
+
+/** Loose union of both pages' filters; each kind's toQuery re-validates on the server anyway. */
+type Filters = {
+  q?: string;
+  position?: CollectionFilters["position"];
+  rarity?: CollectionFilters["rarity"];
+  nation?: string;
+  min?: number;
+  sort?: string;
+  page?: number;
+};
+
+/** Per-page differences: sort options, query builder, and the min-rating control. */
+const KINDS = {
+  collection: { sorts: SORTS as Record<string, { label: string }>, toQuery: (f: Filters) => filtersToQuery(f as unknown as Partial<CollectionFilters>), minRating: false },
+  market: { sorts: MARKET_SORTS as Record<string, { label: string }>, toQuery: (f: Filters) => marketFiltersToQuery(f as unknown as Partial<MarketFilters>), minRating: true },
+};
 
 type Props = {
+  kind?: keyof typeof KINDS;
   filters: Filters;
-  nations: { code: string; name: string; count: number }[];
+  nations: { code: string; name: string; count?: number }[];
 };
 
 const selectClass =
@@ -27,7 +40,8 @@ const selectClass =
  * server re-renders results. Selects apply instantly; search is debounced.
  * Without JS the same controls submit as a plain GET form.
  */
-export function CollectionFilters({ filters, nations }: Props) {
+export function CollectionFilters({ kind = "collection", filters, nations }: Props) {
+  const cfg = KINDS[kind];
   const router = useRouter();
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
@@ -44,7 +58,7 @@ export function CollectionFilters({ filters, nations }: Props) {
   const apply = (patch: Partial<Filters>) => {
     // Any filter change returns to page 1.
     const next = { ...filters, page: 1, ...patch };
-    startTransition(() => router.replace(`${pathname}${filtersToQuery(next)}`, { scroll: false }));
+    startTransition(() => router.replace(`${pathname}${cfg.toQuery(next)}`, { scroll: false }));
   };
 
   useEffect(() => () => clearTimeout(debounce.current), []);
@@ -55,7 +69,7 @@ export function CollectionFilters({ filters, nations }: Props) {
     debounce.current = setTimeout(() => apply({ q: value.trim() || undefined }), 300);
   };
 
-  const active = Boolean(filters.q || filters.position || filters.rarity || filters.nation);
+  const active = Boolean(filters.q || filters.position || filters.rarity || filters.nation || filters.min);
 
   return (
     <form
@@ -83,7 +97,7 @@ export function CollectionFilters({ filters, nations }: Props) {
         />
       </label>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:flex">
+      <div className={cn("grid grid-cols-2 gap-2 lg:flex", cfg.minRating ? "sm:grid-cols-5" : "sm:grid-cols-4")}>
         <label>
           <span className="sr-only">Position</span>
           <select name="position" value={filters.position ?? ""} onChange={(e) => apply({ position: (e.target.value || undefined) as Filters["position"] })} className={cn(selectClass, "w-full")}>
@@ -107,14 +121,25 @@ export function CollectionFilters({ filters, nations }: Props) {
           <select name="nation" value={filters.nation ?? ""} onChange={(e) => apply({ nation: e.target.value || undefined })} className={cn(selectClass, "w-full")}>
             <option value="">All nations</option>
             {nations.map((n) => (
-              <option key={n.code} value={n.code}>{n.name} ({n.count})</option>
+              <option key={n.code} value={n.code}>{n.name}{n.count !== undefined ? ` (${n.count})` : ""}</option>
             ))}
           </select>
         </label>
+        {cfg.minRating && (
+          <label>
+            <span className="sr-only">Minimum rating</span>
+            <select name="min" value={filters.min ?? ""} onChange={(e) => apply({ min: e.target.value ? Number(e.target.value) : undefined })} className={cn(selectClass, "w-full")}>
+              <option value="">Any rating</option>
+              {MIN_RATINGS.map((n) => (
+                <option key={n} value={n}>{n}+ rated</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
           <span className="sr-only">Sort by</span>
           <select name="sort" value={filters.sort} onChange={(e) => apply({ sort: e.target.value as Filters["sort"] })} className={cn(selectClass, "w-full")}>
-            {Object.entries(SORTS).map(([key, s]) => (
+            {Object.entries(cfg.sorts).map(([key, s]) => (
               <option key={key} value={key}>{s.label}</option>
             ))}
           </select>
@@ -130,7 +155,7 @@ export function CollectionFilters({ filters, nations }: Props) {
           type="button"
           onClick={() => {
             setQ("");
-            startTransition(() => router.replace(`${pathname}${filtersToQuery({ sort: filters.sort })}`, { scroll: false }));
+            startTransition(() => router.replace(`${pathname}${cfg.toQuery({ sort: filters.sort })}`, { scroll: false }));
           }}
           className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
         >

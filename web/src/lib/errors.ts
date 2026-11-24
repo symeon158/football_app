@@ -15,6 +15,11 @@ const GAME_ERROR_MESSAGES: Record<string, string> = {
   DUPLICATE_PLAYER: "A player can only appear once in a squad.",
   INVALID_LINEUP: "That line-up isn't valid. Please reload and try again.",
   LAST_TEAM: "You need at least one squad.",
+  CARD_NOT_AVAILABLE: "That card isn't available to buy.",
+  COLLECTION_FULL: "Your collection is full (500 cards).",
+  PACK_NOT_AVAILABLE: "That pack isn't available.",
+  PACK_LIMIT_REACHED: "You've reached today's limit for this pack. Try again tomorrow.",
+  INVALID_IDEMPOTENCY_KEY: "That request was malformed. Please try again.",
 };
 
 const DEFAULT_MESSAGE = "Something went wrong. Please try again.";

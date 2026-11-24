@@ -119,4 +119,48 @@ test.describe("Football Legends — core journeys", () => {
     await page.click("button[type=submit]");
     await expect(page.getByText("Invalid e-mail or password.")).toBeVisible();
   });
+
+  test("forgot password: e-mailed link lets the player choose a new password", async ({ page, context }) => {
+    const { username, password } = await signUp(page);
+    const email = `${username}@example.test`;
+    await context.clearCookies();
+
+    await page.goto("/login");
+    await page.getByRole("link", { name: "Forgot password?" }).click();
+    await page.fill("#email", email);
+    await page.click("button[type=submit]");
+    await expect(page.getByText("a reset link is on its way")).toBeVisible();
+
+    // Local Supabase delivers e-mail to Mailpit.
+    const mailpit = process.env.MAILPIT_URL ?? "http://127.0.0.1:54324";
+    let link: string | undefined;
+    await expect
+      .poll(async () => {
+        const list = await (await fetch(`${mailpit}/api/v1/search?query=to:${encodeURIComponent(email)}`)).json();
+        if (!list.messages?.length) return undefined;
+        const msg = await (await fetch(`${mailpit}/api/v1/message/${list.messages[0].ID}`)).json();
+        link = String(msg.HTML || msg.Text).match(/href="([^"]+)"/)?.[1]?.replaceAll("&amp;", "&");
+        return link;
+      }, { timeout: 30_000 })
+      .toBeTruthy();
+
+    await page.goto(link!);
+    await page.waitForURL("**/reset-password");
+    await page.fill("#password", "NewPass2026");
+    await page.fill("#confirmPassword", "NewPass2026");
+    await page.click("button[type=submit]");
+    await page.waitForURL(/\/dashboard\?password=updated/);
+    await expect(page.getByText("Your password has been updated.")).toBeVisible();
+
+    await context.clearCookies();
+    await page.goto("/login");
+    await page.fill("#email", email);
+    await page.fill("#password", password);
+    await page.click("button[type=submit]");
+    await expect(page.getByText("Invalid e-mail or password.")).toBeVisible();
+    await expect(page.locator("#email")).toHaveValue(email); // kept after a failed attempt
+    await page.fill("#password", "NewPass2026");
+    await page.click("button[type=submit]");
+    await page.waitForURL("**/dashboard");
+  });
 });

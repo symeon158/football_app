@@ -28,6 +28,15 @@ export const signInSchema = z.object({
   password: z.string().min(1, "Enter your password.").max(72),
 });
 
+export const forgotPasswordSchema = z.object({ email: emailSchema });
+
+export const resetPasswordSchema = z
+  .object({ password: passwordSchema, confirmPassword: z.string().max(72) })
+  .refine((v) => v.password === v.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "The two passwords don't match.",
+  });
+
 export type SignUpInput = z.infer<typeof signUpSchema>;
 export type SignInInput = z.infer<typeof signInSchema>;
 

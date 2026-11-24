@@ -13,7 +13,8 @@ export async function signUp(page: Page, prefix = "e2e") {
   await page.fill("#password", password);
   await page.click("button[type=submit]");
   await page.waitForURL("**/dashboard");
-  await expect(page.getByText("Latest player cards")).toBeVisible();
+  // The first sign-up after a server start can be slow (cold connections); later ones take ~2 s.
+  await expect(page.getByText("Latest player cards")).toBeVisible({ timeout: 60_000 });
   return { username, password };
 }
 

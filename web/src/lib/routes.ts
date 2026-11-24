@@ -13,9 +13,10 @@ export const PROTECTED_PREFIXES = [
   "/profile",
   "/managers",
   "/settings",
+  "/reset-password", // reached via the e-mailed recovery link, which signs the player in
 ] as const;
 
-const AUTH_PATHS = ["/login", "/signup"] as const;
+const AUTH_PATHS = ["/login", "/signup", "/forgot-password"] as const;
 
 const matches = (pathname: string, prefix: string) =>
   pathname === prefix || pathname.startsWith(`${prefix}/`);

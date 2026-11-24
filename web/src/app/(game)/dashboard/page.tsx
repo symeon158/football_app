@@ -8,11 +8,25 @@ import { getViewer } from "@/lib/data/viewer";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-export default function DashboardPage() {
+export default function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   return (
-    <Suspense fallback={<DashboardSkeleton />}>
-      <DashboardContent />
-    </Suspense>
+    <>
+      <Suspense>
+        <PasswordUpdatedNotice searchParams={searchParams} />
+      </Suspense>
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardContent />
+      </Suspense>
+    </>
+  );
+}
+
+async function PasswordUpdatedNotice({ searchParams }: Pick<PageProps<"/dashboard">, "searchParams">) {
+  if ((await searchParams).password !== "updated") return null;
+  return (
+    <p role="status" className="mb-4 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm sm:mb-6">
+      Your password has been updated.
+    </p>
   );
 }
 

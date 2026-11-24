@@ -15,7 +15,8 @@ done once; afterwards every push to `main` deploys via Vercel and is checked by 
    ```bash
    npx supabase login                       # opens the browser once
    npx supabase link --project-ref <ref>    # <ref> is in the project URL
-   npx supabase db push                     # applies every migration, incl. the player catalogue
+   npx supabase db push --remote --dry-run  # preview (CLI 3.x targets the local stack without --remote)
+   npx supabase db push --remote            # applies every migration, incl. the player catalogue
    ```
 
    `db push` only runs migrations; it never runs the local test files or seed data.
@@ -29,14 +30,18 @@ done once; afterwards every push to `main` deploys via Vercel and is checked by 
    - **Confirm email: ON** (it is off only in local development).
    - Minimum password length **8**, require **letters and digits** (matches the app's validation).
    - Enable *leaked password protection* if your plan offers it.
-6. **Auth → Email templates → Confirm signup** — point the link at the app's confirm route:
+6. **Auth → Email templates → Confirm signup** *(editable only after custom SMTP is set up — step 7;
+   until then the default template works too, but its link must be opened in the same browser the
+   player signed up in)* — point the link at the app's confirm route so it works from any device:
 
    ```html
    <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/dashboard">Confirm your e-mail</a>
    ```
 
 7. **Auth → SMTP** — configure a real e-mail provider (Resend, Postmark, SES…). Supabase's built-in
-   sender is limited to a few e-mails per hour and is not meant for production sign-ups.
+   sender is limited to a few e-mails per hour, **only delivers to members of your Supabase
+   organisation**, and is not meant for production sign-ups. For a small private test without SMTP,
+   turn *Confirm email* off instead (and back on before a public launch).
 8. **Auth → Rate limits** — keep the defaults (the local `config.toml` raises sign-in limits only for
    automated tests).
 9. **Database → Backups** — on a paid plan, enable Point-in-Time Recovery before launch.
@@ -78,7 +83,7 @@ done once; afterwards every push to `main` deploys via Vercel and is checked by 
 ## 4. Operating it
 
 - **Schema changes**: add a migration (`npx supabase migration new <name>`), run `supabase test db`
-  locally, merge (CI runs everything), then `npx supabase db push`. Push migrations *before* deploying
+  locally, merge (CI runs everything), then `npx supabase db push --remote`. Push migrations *before* deploying
   app code that depends on them.
 - **Engine changes**: bump `ENGINE_VERSION` in `web/src/lib/engine/types.ts`; older matches then show
   "Played on engine x" instead of a replay check.

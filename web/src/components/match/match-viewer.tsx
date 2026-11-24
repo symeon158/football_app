@@ -229,7 +229,12 @@ export function MatchViewer({ homeName, awayName, events, stats, ratings, manOfT
                     {levelUp && <span className="rounded-full bg-gold px-3 py-0.5 text-sm font-black text-black">Level up! Now level {levelUp}</span>}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">Friendly — today&apos;s rewarded matches are used up.</p>
+                  <div className="text-sm">
+                    <p className="font-semibold">No coins or XP: friendly match</p>
+                    <p className="text-muted-foreground">
+                      You had already played today&apos;s paid matches. The allowance resets at midnight UTC.
+                    </p>
+                  </div>
                 )}
               </section>
 

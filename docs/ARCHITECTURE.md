@@ -217,7 +217,7 @@ cannot call it, insert matches, or edit XP. `record_match` itself validates the 
 equal the goal events, enums, sizes), links events only to cards the user owns, and **decides the
 rewards**: `match_rewards()` (win/draw/loss × difficulty 0.75/1/1.5) + 10 FC per goal (max 50) +
 stadium matchday income; XP → `level_for_xp()` (mirrors `progression.ts`, tested). Limits: 5 s
-cooldown, 60 matches/day, rewards for the first 20/day. Kick-off is idempotent (server-rendered key
+cooldown, 60 matches/day, rewards for the first 30/day. Kick-off is idempotent (server-rendered key
 per form), so double submits return the same match.
 
 **Determinism.** `Rng` (mulberry32) is the only source of randomness; `simulateMatch(input)` is pure.

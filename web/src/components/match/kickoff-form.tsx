@@ -1,6 +1,6 @@
 "use client";
 
-import { Shield, Swords, Target } from "lucide-react";
+import { Shield, Swords, Target, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useState } from "react";
 
@@ -34,6 +34,7 @@ type Props = {
   goalBonusCap: number;
   matchdayIncome: number;
   rewardedLeft: number;
+  rewardedPerDay: number;
   playsLeft: number;
 };
 
@@ -52,7 +53,50 @@ const DIFFICULTIES = [
 const optionClass =
   "flex cursor-pointer flex-col gap-1 rounded-xl border p-3 transition has-[:checked]:border-primary has-[:checked]:bg-primary/10 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring";
 
-export function KickoffForm({ squads, idempotencyKey, rewards, goalBonus, goalBonusCap, matchdayIncome, rewardedLeft, playsLeft }: Props) {
+/** Local time of the next UTC midnight, e.g. "02:00". Client-only (depends on the clock and time zone). */
+function localResetTime(): string {
+  const now = new Date();
+  const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  return reset.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function RewardAllowance({ left, perDay, hydrated }: { left: number; perDay: number; hydrated: boolean }) {
+  const used = Math.min(perDay, perDay - left);
+  const resets = `Resets at midnight UTC${hydrated ? ` (${localResetTime()} your time)` : ""}.`;
+
+  if (left <= 0) {
+    return (
+      <div role="status" className="flex gap-3 rounded-xl border border-gold/50 bg-gold/10 p-3 text-sm">
+        <TriangleAlert className="mt-0.5 size-5 shrink-0 text-gold" aria-hidden />
+        <div>
+          <p className="font-semibold">Daily reward limit reached ({perDay}/{perDay} paid matches)</p>
+          <p className="text-muted-foreground">
+            You can keep playing friendlies — they still count towards challenges, but give no coins or XP. {resets}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between text-xs">
+        <span className="font-medium">Paid matches today</span>
+        <span className={left <= 3 ? "font-semibold text-gold" : "text-muted-foreground"}>
+          {left <= 3 ? `Only ${left} left` : `${left} of ${perDay} left`}
+        </span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+        <div className={cn("h-full rounded-full", left <= 3 ? "bg-gold" : "bg-primary")} style={{ width: `${(used / perDay) * 100}%` }} />
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        The first {perDay} matches each day give coins and XP; after that they are friendlies. {resets}
+      </p>
+    </div>
+  );
+}
+
+export function KickoffForm({ squads, idempotencyKey, rewards, goalBonus, goalBonusCap, matchdayIncome, rewardedLeft, rewardedPerDay, playsLeft }: Props) {
   const [state, action, pending] = useActionState<KickoffState, FormData>(kickOff, { ok: false });
   const hydrated = useHydrated();
   const initial = squads.find((s) => s.isActive) ?? squads[0];
@@ -136,18 +180,21 @@ export function KickoffForm({ squads, idempotencyKey, rewards, goalBonus, goalBo
               ))}
             </dl>
             <p className="mt-2 text-xs text-muted-foreground">
-              Plus <Coins amount={goalBonus} className="text-xs" /> per goal (max {goalBonusCap}) and <Coins amount={matchdayIncome} className="text-xs" /> matchday income. {rewardedLeft} rewarded match(es) left today.
+              Plus <Coins amount={goalBonus} className="text-xs" /> per goal (max {goalBonusCap}) and <Coins amount={matchdayIncome} className="text-xs" /> matchday income.
             </p>
           </>
         ) : (
-          <p className="text-muted-foreground">You&apos;ve earned today&apos;s rewards — further matches are friendlies until midnight UTC.</p>
+          <p className="text-muted-foreground">No coins or XP from further matches today — they are friendlies.</p>
         )}
       </div>
+
+      <RewardAllowance left={rewardedLeft} perDay={rewardedPerDay} hydrated={hydrated} />
 
       {state.message && !state.ok && <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.message}</p>}
 
       <Button type="submit" size="lg" disabled={!canPlay || pending || !hydrated} className="h-12 w-full gap-2 text-base">
-        <Swords className="size-5" /> {pending ? "Kicking off…" : playsLeft > 0 ? "Kick off" : "No matches left today"}
+        <Swords className="size-5" />{" "}
+        {pending ? "Kicking off…" : playsLeft <= 0 ? "No matches left today" : rewardedLeft > 0 ? "Kick off" : "Kick off · friendly (no rewards)"}
       </Button>
       {!canPlay && squad?.ready === false && (
         <Link href={`/team?team=${squad.id}`} className={cn(buttonVariants({ variant: "outline" }), "w-full")}>Complete your line-up</Link>

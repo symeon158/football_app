@@ -51,6 +51,7 @@ async function MatchesContent() {
           goalBonusCap={c.limits.goal_bonus_cap}
           matchdayIncome={c.stadium.income}
           rewardedLeft={Math.max(0, c.limits.rewarded_per_day - c.today.rewarded)}
+          rewardedPerDay={c.limits.rewarded_per_day}
           playsLeft={Math.max(0, c.limits.max_per_day - c.today.played)}
         />
         <p className="mt-4 text-xs text-muted-foreground">

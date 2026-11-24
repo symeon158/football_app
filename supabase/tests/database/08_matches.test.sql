@@ -76,13 +76,13 @@ update public.matches set created_at = now() - interval '2 minutes';
 select lives_ok($$select public.record_match('cccccccc-0000-0000-0000-000000000001', (select team from fx), 'k-match-0007', pg_temp.payload(2, 0))$$, 'third match');
 select results_eq($$select xp, level from public.profiles where id = 'cccccccc-0000-0000-0000-000000000001'$$, $$values (130::bigint, 2)$$, 'crossing 100 XP reaches level 2');
 
--- Daily reward cap: pretend 20 rewarded matches already happened today.
+-- Daily reward cap: pretend 30 rewarded matches already happened today.
 update public.matches set created_at = now() - interval '3 minutes';
 insert into public.matches (user_id, team_id, opponent_name, opponent_rating, tactic, seed, engine_version, status, completed_at, rewarded, created_at)
 select 'cccccccc-0000-0000-0000-000000000001', (select team from fx), 'Filler', 50, 'balanced', g, '1.0.0', 'completed', now(), true, now() - interval '10 minutes'
-  from generate_series(1, 17) g;
+  from generate_series(1, 27) g;
 create temporary table m3 as select public.record_match('cccccccc-0000-0000-0000-000000000001', (select team from fx), 'k-match-0008', pg_temp.payload(4, 0)) as id;
-select results_eq($$select reward_coins, xp_gained, rewarded from public.matches where id = (select id from m3)$$, $$values (0, 0, false)$$, 'after 20 rewarded matches, no more rewards today');
+select results_eq($$select reward_coins, xp_gained, rewarded from public.matches where id = (select id from m3)$$, $$values (0, 0, false)$$, 'after 30 rewarded matches, no more rewards today');
 select is((select count(*)::int from public.coin_transactions where reference_id = (select id from m3)), 0, 'no ledger entry for unrewarded match');
 select is((select sum(amount) from public.coin_transactions where user_id = 'cccccccc-0000-0000-0000-000000000001'),
           (select balance::numeric from public.wallets where user_id = 'cccccccc-0000-0000-0000-000000000001'), 'ledger still equals balance');

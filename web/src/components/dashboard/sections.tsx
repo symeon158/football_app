@@ -245,16 +245,16 @@ export function RecentMatches({ matches, teamName }: { matches: Dashboard["match
 /* --------------------------------------------------------- stadium status */
 
 const CATEGORY_META: Record<StadiumCategory, { label: string; icon: typeof Armchair }> = {
-  seating: { label: "Seating", icon: Armchair },
-  lighting: { label: "Lighting", icon: Lightbulb },
-  pitch: { label: "Pitch", icon: Sprout },
-  facilities: { label: "Facilities", icon: Dumbbell },
+  seating: { label: "Stands", icon: Armchair },
+  lighting: { label: "Floodlights", icon: Lightbulb },
+  pitch: { label: "Surface", icon: Sprout },
+  facilities: { label: "Clubhouse", icon: Dumbbell },
 };
 
 export function StadiumStatus({ stadium }: { stadium: Dashboard["stadium"] }) {
   const levels = Object.fromEntries(stadium.upgrades.map((u) => [u.category, u.level])) as Record<StadiumCategory, number>;
   return (
-    <Panel title="Stadium" href="/stadium" linkLabel="Upgrade" className="lg:col-span-5">
+    <Panel title="Home ground" href="/stadium" linkLabel="Upgrade" className="lg:col-span-5">
       <div className="overflow-hidden rounded-xl border bg-gradient-to-b from-slate-950 to-slate-900">
         <StadiumIllustration levels={levels} design={stadium.design as StadiumDesign} title={`${stadium.name}, level ${stadium.level}`} />
       </div>

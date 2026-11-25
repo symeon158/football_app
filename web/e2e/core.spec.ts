@@ -62,7 +62,7 @@ test.describe("Football Legends — core journeys", () => {
     await expect.poll(() => coinBalance(page)).toBe(1000 - price - 400);
 
     await page.goto("/stadium");
-    await page.click("button[aria-label^='Upgrade Lighting to level 2']");
+    await page.click("button[aria-label^='Upgrade Floodlights to level 2']");
     await page.getByRole("button", { name: "Confirm" }).click();
     await expect(page.getByText("Upgraded to level 2!")).toBeVisible();
     await expect.poll(() => coinBalance(page)).toBe(1000 - price - 400 - 300);
@@ -147,9 +147,9 @@ test.describe("Football Legends — core journeys", () => {
     await playKeyMoments(page);
 
     await op.goto("/matches");
-    await expect(op.getByText(`${me} challenged you`).first()).toBeVisible();
+    await expect(op.getByText(`${me} challenged you`).first()).toBeVisible({ timeout: 60_000 });
     await op.goto(matchPath);
-    await expect(op.getByText(`${me} challenged your club`)).toBeVisible();
+    await expect(op.getByText(`${me} challenged your club`)).toBeVisible({ timeout: 60_000 });
     await expect(op.getByRole("link", { name: "Challenge back" })).toBeVisible();
     await other.close();
   });

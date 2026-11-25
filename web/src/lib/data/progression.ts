@@ -39,6 +39,23 @@ export async function getLeaderboard(board: Board, period: "all" | "week", limit
   return data ?? [];
 }
 
+export type AreaRow = { area: string; managers: number; wins: number; goals: number; is_mine: boolean };
+
+/** Neighbourhood table: wins by all clubs that set the same area. */
+export async function getAreaTable(period: "week" | "all"): Promise<AreaRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_area_table", { p_period: period });
+  if (error) throw new Error(`Failed to load the neighbourhood table: ${error.message}`);
+  return data ?? [];
+}
+
+/** A manager's public neighbourhood (null when not set). */
+export async function getManagerArea(username: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("get_manager_area", { p_username: username });
+  return (data as string | null) ?? null;
+}
+
 export type ManagerProfile = {
   username: string;
   display_name: string | null;

@@ -7,9 +7,9 @@ import type { StadiumCategory } from "@/lib/game/stadium";
  * modules: a Server Component importing a plain value from one receives a
  * client reference, not the object (which crashed the history list).
  */
-export const CATEGORY_META: Record<StadiumCategory, { label: string; icon: typeof Armchair; effect: string }> = {
-  seating: { label: "Seating", icon: Armchair, effect: "More seats → bigger crowds and matchday income" },
-  lighting: { label: "Lighting", icon: Lightbulb, effect: "Better floodlights → stronger home advantage" },
-  pitch: { label: "Pitch", icon: Sprout, effect: "Better turf → stronger home advantage" },
-  facilities: { label: "Facilities", icon: Dumbbell, effect: "Training and recovery → home advantage, roof" },
+export const CATEGORY_META: Record<StadiumCategory, { label: string; icon: typeof Armchair; effect: string; base: string }> = {
+  seating: { label: "Stands & supporters", icon: Armchair, effect: "More supporters → matchday income", base: "Fans along the fence — 5,000 supporters" },
+  lighting: { label: "Floodlights", icon: Lightbulb, effect: "Play under the lights → home advantage", base: "One street lamp" },
+  pitch: { label: "Surface", icon: Sprout, effect: "From concrete to grass → home advantage", base: "Concrete court" },
+  facilities: { label: "Clubhouse", icon: Dumbbell, effect: "Changing rooms to sports centre → home advantage", base: "Changing in the car park" },
 };

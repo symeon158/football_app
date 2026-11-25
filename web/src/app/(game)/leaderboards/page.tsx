@@ -6,7 +6,7 @@ import { Suspense } from "react";
 import { EmptyState } from "@/components/dashboard/panel";
 import { Avatar } from "@/components/game/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BOARDS, getLeaderboard, type Board } from "@/lib/data/progression";
+import { BOARDS, getAreaTable, getLeaderboard, type Board } from "@/lib/data/progression";
 import { getViewer } from "@/lib/data/viewer";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -32,6 +32,7 @@ export default function LeaderboardsPage({ searchParams }: PageProps<"/leaderboa
 async function BoardContent({ searchParams }: Pick<PageProps<"/leaderboards">, "searchParams">) {
   await getViewer();
   const params = await searchParams;
+  if (params.board === "areas") return <AreaBoard period={params.period === "all" ? "all" : "week"} />;
   const board: Board = isBoard(params.board) ? params.board : "level";
   const period = BOARDS[board].weekly && params.period === "week" ? "week" : "all";
   const rows = await getLeaderboard(board, period);
@@ -51,6 +52,9 @@ async function BoardContent({ searchParams }: Pick<PageProps<"/leaderboards">, "
             {BOARDS[b].label}
           </Link>
         ))}
+        <Link href="/leaderboards?board=areas" className="rounded-full border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
+          Neighbourhoods
+        </Link>
       </nav>
       {BOARDS[board].weekly && (
         <nav aria-label="Period" className="flex gap-1 rounded-lg border bg-card/60 p-1 text-sm sm:w-fit">
@@ -86,6 +90,61 @@ async function BoardContent({ searchParams }: Pick<PageProps<"/leaderboards">, "
               <span className="text-right">
                 <span className="block font-bold tabular-nums">{formatNumber(r.value)}</span>
                 <span className="block text-[11px] text-muted-foreground">{BOARDS[board].unit}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </>
+  );
+}
+
+/** Which neighbourhood wins most: every club that set the same area counts. */
+async function AreaBoard({ period }: { period: "week" | "all" }) {
+  const rows = await getAreaTable(period);
+  const mine = rows.find((r) => r.is_mine);
+  return (
+    <>
+      <nav aria-label="Leaderboard" className="flex flex-wrap gap-2">
+        {(Object.keys(BOARDS) as Board[]).map((b) => (
+          <Link key={b} href={`/leaderboards?board=${b}`} className="rounded-full border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
+            {BOARDS[b].label}
+          </Link>
+        ))}
+        <span aria-current="page" className="rounded-full border border-primary bg-primary px-3 py-1.5 text-sm text-primary-foreground">Neighbourhoods</span>
+      </nav>
+      <nav aria-label="Period" className="flex gap-1 rounded-lg border bg-card/60 p-1 text-sm sm:w-fit">
+        {(["week", "all"] as const).map((p) => (
+          <Link key={p} href={`/leaderboards?board=areas&period=${p}`} aria-current={p === period ? "page" : undefined}
+            className={cn("flex-1 rounded-md px-3 py-1.5 text-center", p === period ? "bg-accent font-medium text-foreground" : "text-muted-foreground")}>
+            {p === "week" ? "This week" : "All time"}
+          </Link>
+        ))}
+      </nav>
+      {mine ? (
+        <p className="rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm">
+          📍 <span className="font-bold">{mine.area}</span> is <span className="font-bold">#{rows.indexOf(mine) + 1}</span> with{" "}
+          <span className="font-bold tabular-nums">{formatNumber(mine.wins)}</span> wins from {mine.managers} {mine.managers === 1 ? "club" : "clubs"}.
+        </p>
+      ) : (
+        <p className="rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm">
+          Represent your area: set your neighbourhood on your <Link href="/stadium" className="font-semibold underline">home ground</Link> page.
+        </p>
+      )}
+      {rows.length === 0 ? (
+        <EmptyState icon={<Medal className="size-5" />} title="No neighbourhoods yet" body="Clubs appear here once they set their area." />
+      ) : (
+        <ol className="overflow-hidden rounded-2xl border bg-card/70 backdrop-blur">
+          {rows.map((r, i) => (
+            <li key={r.area.toLowerCase()} className={cn("flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0", r.is_mine && "bg-primary/10")}>
+              <span className={cn("w-8 text-center font-black tabular-nums", i === 0 ? "text-gold" : i < 3 ? "text-foreground" : "text-muted-foreground")}>{i + 1}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">📍 {r.area}{r.is_mine && <span className="ml-1.5 text-[10px] font-semibold uppercase text-primary">yours</span>}</span>
+                <span className="block text-xs text-muted-foreground">{r.managers} {r.managers === 1 ? "club" : "clubs"} · {formatNumber(r.goals)} goals</span>
+              </span>
+              <span className="text-right">
+                <span className="block font-bold tabular-nums">{formatNumber(r.wins)}</span>
+                <span className="block text-[11px] text-muted-foreground">wins</span>
               </span>
             </li>
           ))}

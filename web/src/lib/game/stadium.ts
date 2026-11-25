@@ -10,14 +10,22 @@ export const MAX_STADIUM_LEVEL = 5;
 
 export const DESIGNS = ["classic", "modern", "bowl", "fortress"] as const;
 export type StadiumDesign = (typeof DESIGNS)[number];
+/** Ground styles (the stored keys predate the neighbourhood theme). */
 export const DESIGN_INFO: Record<StadiumDesign, { label: string; description: string }> = {
-  classic: { label: "Classic", description: "Traditional slate stands and steel roof." },
-  modern: { label: "Modern", description: "Glass and light, built for broadcast." },
-  bowl: { label: "Bowl", description: "A continuous ring of seats close to the pitch." },
-  fortress: { label: "Fortress", description: "Red-brick terraces that roar." },
+  classic: { label: "Old town", description: "Between the apartment blocks, balconies full of fans." },
+  modern: { label: "Urban", description: "Concrete, graffiti walls and city lights." },
+  bowl: { label: "Park", description: "Trees, grass banks and a quiet street." },
+  fortress: { label: "Harbour", description: "Containers, cranes and the sea breeze." },
 };
 
 export type StadiumLevels = Record<StadiumCategory, number>;
+
+/** What the ground is at each overall level. */
+export const GROUND_TIERS = ["Street court", "Five-a-side cage", "Community pitch", "Floodlit local ground", "Neighbourhood fortress"] as const;
+export const groundTier = (level: number) => GROUND_TIERS[Math.max(1, Math.min(5, level)) - 1];
+
+/** Must match the CHECK on public.stadiums.area: Latin or Greek letters, spaces, . ' - (2–30). */
+export const AREA_PATTERN = /^[A-Za-zÀ-ɏͰ-Ͽἀ-῾][A-Za-zÀ-ɏͰ-Ͽἀ-῾ .'-]*$/;
 
 /** Must match the CASE in public.stadiums.capacity. */
 export const CAPACITY_BY_SEATING = [5000, 12000, 25000, 45000, 70000] as const;

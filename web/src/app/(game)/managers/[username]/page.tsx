@@ -7,7 +7,7 @@ import { Suspense } from "react";
 import { ProfileView } from "@/components/progression/profile-view";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getManagerProfile } from "@/lib/data/progression";
+import { getManagerArea, getManagerProfile } from "@/lib/data/progression";
 import { getViewer } from "@/lib/data/viewer";
 import { usernameSchema } from "@/lib/validation/auth";
 
@@ -30,14 +30,17 @@ async function ManagerContent({ params }: Pick<PageProps<"/managers/[username]">
   await getViewer();
   const username = decodeURIComponent((await params).username);
   if (!usernameSchema.safeParse(username).success) notFound();
-  const profile = await getManagerProfile(username);
+  const [profile, area] = await Promise.all([getManagerProfile(username), getManagerArea(username)]);
   if (!profile) notFound();
   if (profile.is_me) redirect("/profile");
   return (
     <>
-      <Link href={`/matches/challenge/${encodeURIComponent(profile.username)}`} className={buttonVariants({ className: "gap-2" })}>
-        <Swords className="size-4" /> Challenge {profile.username}
-      </Link>
+      <div className="flex flex-wrap items-center gap-3">
+        <Link href={`/matches/challenge/${encodeURIComponent(profile.username)}`} className={buttonVariants({ className: "gap-2" })}>
+          <Swords className="size-4" /> Challenge {profile.username}
+        </Link>
+        {area && <span className="rounded-full border border-primary/40 bg-primary/10 px-2.5 py-0.5 text-sm font-medium text-primary">📍 {area}</span>}
+      </div>
       <ProfileView p={profile} />
     </>
   );

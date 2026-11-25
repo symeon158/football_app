@@ -27,7 +27,7 @@ export const MAIN_NAV: NavItem[] = [
   { href: "/club", label: "My Club", short: "Club", icon: Shield, phase: 4, description: "Club identity, crest, colours and squads." },
   { href: "/collection", label: "Collection", short: "Cards", icon: Layers, phase: 3, description: "Browse, filter and inspect every card you own." },
   { href: "/team", label: "Team Builder", short: "Team", icon: Users, phase: 4, description: "Pick a formation, drag players into position and choose a captain." },
-  { href: "/stadium", label: "Stadium", short: "Stadium", icon: Building2, phase: 6, description: "Upgrade seating, lighting, pitch and facilities." },
+  { href: "/stadium", label: "Home Ground", short: "Ground", icon: Building2, phase: 6, description: "Grow your neighbourhood ground from a street court to a local fortress." },
   { href: "/marketplace", label: "Marketplace", short: "Market", icon: Store, phase: 5, description: "Buy players and open packs with transparent odds." },
   { href: "/matches", label: "Match Centre", short: "Match", icon: Swords, phase: 7, description: "Pick tactics, kick off and follow the action live." },
   { href: "/challenges", label: "Challenges", short: "Goals", icon: Target, phase: 8, description: "Daily, weekly and team-building challenges." },

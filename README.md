@@ -24,7 +24,8 @@ CI (`.github/workflows/ci.yml`) runs every test suite below on each push and pul
 | 9 | Testing, security review, deployment | ✅ done (deploy steps in docs/DEPLOYMENT.md) |
 | — | Password reset, manager challenges (friend matches) | ✅ done |
 | — | Interactive matches: key moments + matchday touchline (tactics, shouts, subs, fatigue) | ✅ done |
-| — | Weekly league, daily streak, player training, cup, squad missions, trading | planned |
+| — | Neighbourhood theme: home grounds, areas, derbies, area table | ✅ done |
+| — | "My Player" character, weekly league, daily streak, training, cup, squad missions, trading | planned |
 
 ## Prerequisites
 

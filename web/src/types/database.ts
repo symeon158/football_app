@@ -361,14 +361,14 @@ isOneToOne: false
                   ]
                 },"stadiums": {
                   Row: {
-                    "capacity": number | null,"created_at": string,"design_template": string,"facilities_level": number,"id": string,"lighting_level": number,"name": string,"pitch_level": number,"seating_level": number,"stadium_level": number | null,"updated_at": string,"user_id": string
+                    "area": string | null,"capacity": number | null,"created_at": string,"design_template": string,"facilities_level": number,"id": string,"lighting_level": number,"name": string,"pitch_level": number,"seating_level": number,"stadium_level": number | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "capacity"?: never,"created_at"?: string,"design_template"?: string,"facilities_level"?: number,"id"?: string,"lighting_level"?: number,"name": string,"pitch_level"?: number,"seating_level"?: number,"stadium_level"?: never,"updated_at"?: string,"user_id": string
+                    "area"?: string | null,"capacity"?: never,"created_at"?: string,"design_template"?: string,"facilities_level"?: number,"id"?: string,"lighting_level"?: number,"name": string,"pitch_level"?: number,"seating_level"?: number,"stadium_level"?: never,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "capacity"?: never,"created_at"?: string,"design_template"?: string,"facilities_level"?: number,"id"?: string,"lighting_level"?: number,"name"?: string,"pitch_level"?: number,"seating_level"?: number,"stadium_level"?: never,"updated_at"?: string,"user_id"?: string
+                    "area"?: string | null,"capacity"?: never,"created_at"?: string,"design_template"?: string,"facilities_level"?: number,"id"?: string,"lighting_level"?: number,"name"?: string,"pitch_level"?: number,"seating_level"?: number,"stadium_level"?: never,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -583,6 +583,11 @@ isOneToOne: false
               "badge_icon": string,"claimed": boolean,"claimed_at": string,"code": string,"description": string,"id": string,"metric": string,"progress": number,"reward_coins": number,"reward_xp": number,"target": number,"title": string,"unlocked": boolean
             }[]
                            },
+"get_area_table":
+{ Args: { "p_period"?: string }; Returns: {
+              "area": string,"goals": number,"is_mine": boolean,"managers": number,"wins": number
+            }[]
+                           },
 "get_challenges":
 { Args: Record<PropertyKey, never>; Returns: {
               "claimed": boolean,"code": string,"completed": boolean,"description": string,"id": string,"metric": string,"period": Database["public"]['Enums']["challenge_period"],"period_end": string,"period_start": string,"progress": number,"reward_coins": number,"reward_xp": number,"target": number,"title": string
@@ -595,6 +600,9 @@ isOneToOne: false
 { Args: { "p_board": string,"p_limit"?: number,"p_period"?: string }; Returns: {
               "avatar_key": string,"display_name": string,"is_me": boolean,"level": number,"rank": number,"username": string,"value": number
             }[]
+                           },
+"get_manager_area":
+{ Args: { "p_username": string }; Returns: string
                            },
 "get_manager_profile":
 { Args: { "p_username": string }; Returns: Json

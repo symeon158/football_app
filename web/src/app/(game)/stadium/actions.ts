@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 
 import { toUserMessage } from "@/lib/errors";
-import { CATEGORIES, DESIGNS } from "@/lib/game/stadium";
+import { AREA_PATTERN, CATEGORIES, DESIGNS } from "@/lib/game/stadium";
 import { createClient, getUserId } from "@/lib/supabase/server";
 import { idempotencyKeySchema } from "@/lib/validation/market";
 
@@ -40,23 +40,32 @@ export async function upgradeStadium(input: z.input<typeof upgradeSchema>): Prom
 const identitySchema = z.object({
   name: z.string().trim().min(3, "Use at least 3 characters.").max(40, "Use at most 40 characters."),
   design: z.enum(DESIGNS),
+  area: z
+    .string()
+    .trim()
+    .max(30, "Use at most 30 characters.")
+    .refine((v) => v === "" || (v.length >= 2 && AREA_PATTERN.test(v)), "Use letters only (2–30), e.g. Kypseli.")
+    .optional(),
 });
 
 /** Name and design are cosmetic: updated directly under RLS + column grants. */
 export async function updateStadium(input: z.input<typeof identitySchema>): Promise<StadiumActionResult> {
   const parsed = identitySchema.safeParse(input);
-  if (!parsed.success) return { ok: false, message: z.flattenError(parsed.error).fieldErrors.name?.[0] ?? "Invalid input." };
+  if (!parsed.success) {
+    const f = z.flattenError(parsed.error).fieldErrors;
+    return { ok: false, message: f.name?.[0] ?? f.area?.[0] ?? "Invalid input." };
+  }
   const userId = await getUserId();
   if (!userId) return { ok: false, message: toUserMessage({ message: "NOT_AUTHENTICATED" }) };
 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("stadiums")
-    .update({ name: parsed.data.name, design_template: parsed.data.design })
+    .update({ name: parsed.data.name, design_template: parsed.data.design, ...(parsed.data.area !== undefined ? { area: parsed.data.area || null } : {}) })
     .eq("user_id", userId)
     .select("id");
   if (error) return { ok: false, message: toUserMessage(error) };
   if (!data?.length) return { ok: false, message: toUserMessage({ message: "STADIUM_NOT_FOUND" }) };
   refresh();
-  return { ok: true, message: "Stadium updated." };
+  return { ok: true, message: "Ground updated." };
 }

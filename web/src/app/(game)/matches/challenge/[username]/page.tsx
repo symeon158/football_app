@@ -10,6 +10,7 @@ import { KickoffForm } from "@/components/match/kickoff-form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getFriendlyOpponent } from "@/lib/data/friendly";
 import { getMatchCentre } from "@/lib/data/matches";
+import { getManagerArea } from "@/lib/data/progression";
 import { getFormations } from "@/lib/data/team";
 import { getViewer } from "@/lib/data/viewer";
 import { buildTeamSheet } from "@/lib/engine/team-sheet";
@@ -37,7 +38,14 @@ async function ChallengeContent({ params }: Pick<PageProps<"/matches/challenge/[
   if (username.toLowerCase() === viewer.username.toLowerCase()) redirect("/matches");
 
   const now = new Date();
-  const [opp, centre, formations] = await Promise.all([getFriendlyOpponent(username), getMatchCentre(viewer.userId, now), getFormations()]);
+  const [opp, centre, formations, myArea, theirArea] = await Promise.all([
+    getFriendlyOpponent(username),
+    getMatchCentre(viewer.userId, now),
+    getFormations(),
+    getManagerArea(viewer.username),
+    getManagerArea(username),
+  ]);
+  const derby = Boolean(myArea && theirArea && myArea.toLocaleLowerCase() === theirArea.toLocaleLowerCase());
   if (!opp) notFound();
 
   const built = opp.squad ? buildTeamSheet(opp.squad, formations[opp.squad.formation] ?? [], opp.cards, opp.squad.tactic) : null;
@@ -49,6 +57,13 @@ async function ChallengeContent({ params }: Pick<PageProps<"/matches/challenge/[
       <header>
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">Challenge a manager</p>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{opp.squad ? `vs ${opp.squad.name}` : opp.displayName}</h1>
+        {derby ? (
+          <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-gold/50 bg-gold/15 px-3 py-1 text-sm font-semibold text-gold">
+            🔥 Local derby — both clubs are from {myArea}
+          </p>
+        ) : theirArea ? (
+          <p className="mt-2 text-sm text-muted-foreground">📍 From {theirArea}{myArea ? ` · you're from ${myArea}` : ""}</p>
+        ) : null}
       </header>
 
       {!opp.squad || !built?.ok ? (

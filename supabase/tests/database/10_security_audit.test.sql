@@ -37,7 +37,7 @@ select is(
 select results_eq(
   $$select (table_name::text || '.' || column_name::text) collate "default" from information_schema.column_privileges
      where grantee = 'authenticated' and privilege_type = 'UPDATE' and table_schema = 'public' order by 1$$,
-  $$values ('profiles.avatar_key'), ('profiles.display_name'), ('stadiums.design_template'), ('stadiums.name'),
+  $$values ('profiles.avatar_key'), ('profiles.display_name'), ('stadiums.area'), ('stadiums.design_template'), ('stadiums.name'),
            ('teams.logo_template'), ('teams.name'), ('teams.primary_color'), ('teams.secondary_color')$$,
   'updatable columns are exactly the cosmetic ones');
 select is(

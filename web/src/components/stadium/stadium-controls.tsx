@@ -57,7 +57,7 @@ export function UpgradePanel({
 
       <p className="mt-3 text-sm">
         <span className="text-muted-foreground">Now: </span>
-        {current ? current.description : "Basic"}
+        {current ? current.description : CATEGORY_META[category].base}
       </p>
 
       <div className="mt-auto pt-4">
@@ -95,10 +95,11 @@ export function UpgradePanel({
   );
 }
 
-/** Rename the stadium and pick one of four original designs (free). */
-export function StadiumIdentity({ name, design, levels }: { name: string; design: StadiumDesign; levels: StadiumLevels }) {
+/** Rename the ground, set its neighbourhood and pick one of four original styles (free). */
+export function StadiumIdentity({ name, area, design, levels }: { name: string; area: string | null; design: StadiumDesign; levels: StadiumLevels }) {
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState(name);
+  const [draftArea, setDraftArea] = useState(area ?? "");
   const [draftDesign, setDraftDesign] = useState<StadiumDesign>(design);
   const [result, setResult] = useState<StadiumActionResult | null>(null);
   const [pending, start] = useTransition();
@@ -107,8 +108,13 @@ export function StadiumIdentity({ name, design, levels }: { name: string; design
     return (
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{name}</h1>
-        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setDraftName(name); setDraftDesign(design); setResult(null); setEditing(true); }}>
-          <Pencil className="size-3.5" /> Rename &amp; style
+        {area ? (
+          <span className="rounded-full border border-primary/40 bg-primary/10 px-2.5 py-0.5 text-sm font-medium text-primary">📍 {area}</span>
+        ) : (
+          <span className="text-sm text-gold">Set your neighbourhood to join local derbies →</span>
+        )}
+        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setDraftName(name); setDraftArea(area ?? ""); setDraftDesign(design); setResult(null); setEditing(true); }}>
+          <Pencil className="size-3.5" /> Name, area &amp; style
         </Button>
         {result?.ok && <span role="status" className="text-sm text-primary">{result.message}</span>}
       </div>
@@ -120,7 +126,7 @@ export function StadiumIdentity({ name, design, levels }: { name: string; design
       onSubmit={(e) => {
         e.preventDefault();
         start(async () => {
-          const r = await updateStadium({ name: draftName, design: draftDesign });
+          const r = await updateStadium({ name: draftName, design: draftDesign, area: draftArea });
           setResult(r);
           if (r.ok) setEditing(false);
         });
@@ -128,17 +134,22 @@ export function StadiumIdentity({ name, design, levels }: { name: string; design
       className="space-y-4 rounded-2xl border bg-card/70 p-4 backdrop-blur"
     >
       <label className="block text-xs font-medium text-muted-foreground">
-        Stadium name
+        Neighbourhood
+        <Input value={draftArea} onChange={(e) => setDraftArea(e.target.value)} maxLength={30} placeholder="e.g. Kypseli, Pagkrati, Exarcheia" className="mt-1 h-10 max-w-md text-base text-foreground" />
+        <span className="mt-1 block text-[11px]">Shown to other managers: your area&apos;s table and local derbies. Leave empty to keep it private.</span>
+      </label>
+      <label className="block text-xs font-medium text-muted-foreground">
+        Ground name
         <Input value={draftName} onChange={(e) => setDraftName(e.target.value)} required minLength={3} maxLength={40} className="mt-1 h-10 max-w-md text-base text-foreground" />
       </label>
       <fieldset>
-        <legend className="mb-2 text-xs font-medium text-muted-foreground">Design</legend>
+        <legend className="mb-2 text-xs font-medium text-muted-foreground">Style</legend>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {DESIGNS.map((d) => (
             <label key={d} className="cursor-pointer rounded-xl border p-2 transition has-[:checked]:border-primary has-[:checked]:bg-primary/10 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
               <input type="radio" name="design" value={d} checked={draftDesign === d} onChange={() => setDraftDesign(d)} className="sr-only" />
               <span className="block overflow-hidden rounded-lg bg-gradient-to-b from-slate-950 to-slate-900">
-                <StadiumIllustration levels={levels} design={d} title={`${DESIGN_INFO[d].label} design preview`} />
+                <StadiumIllustration levels={levels} design={d} title={`${DESIGN_INFO[d].label} style preview`} />
               </span>
               <span className="mt-1.5 block text-sm font-medium">{DESIGN_INFO[d].label}</span>
               <span className="block text-[11px] text-muted-foreground">{DESIGN_INFO[d].description}</span>

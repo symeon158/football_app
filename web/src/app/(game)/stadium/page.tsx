@@ -10,9 +10,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getStadium } from "@/lib/data/stadium";
 import { getViewer } from "@/lib/data/viewer";
 import { formatNumber } from "@/lib/format";
-import { CATEGORIES, costToMax, DESIGN_INFO, homeBonus, matchdayIncome, nextUpgrade } from "@/lib/game/stadium";
+import { CATEGORIES, costToMax, DESIGN_INFO, groundTier, homeBonus, matchdayIncome, nextUpgrade } from "@/lib/game/stadium";
 
-export const metadata: Metadata = { title: "Stadium" };
+export const metadata: Metadata = { title: "Home ground" };
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" });
 
@@ -33,30 +33,30 @@ async function StadiumContent() {
   const remaining = costToMax(s.levels, s.costs);
 
   const stats = [
-    { label: "Stadium level", value: `${s.level} / 5` },
-    { label: "Capacity", value: `${formatNumber(s.capacity)} seats` },
+    { label: "Ground", value: groundTier(s.level), hint: `Level ${s.level} of 5` },
+    { label: "Supporters", value: formatNumber(s.capacity) },
     { label: "Home advantage", value: `+${bonus}%` },
-    { label: "Matchday income", value: <Coins amount={matchdayIncome(s.capacity)} />, hint: "per home match, once the Match Centre opens" },
+    { label: "Matchday income", value: <Coins amount={matchdayIncome(s.capacity)} />, hint: "per paid home match" },
   ];
 
   return (
     <>
       <header className="space-y-1">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">Stadium builder</p>
-        <StadiumIdentity name={s.name} design={s.design} levels={s.levels} />
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">Home ground</p>
+        <StadiumIdentity name={s.name} area={s.area} design={s.design} levels={s.levels} />
       </header>
 
       <section className="relative overflow-hidden rounded-3xl border bg-gradient-to-b from-slate-950 via-slate-900 to-emerald-950/60 shadow-2xl">
         {/* Remounting on level change replays the build-up animation. */}
         <div key={JSON.stringify(s.levels) + s.design} className="motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-700">
-          <StadiumIllustration levels={s.levels} design={s.design} title={`${s.name}: ${DESIGN_INFO[s.design].label} design, level ${s.level}, ${formatNumber(s.capacity)} seats`} />
+          <StadiumIllustration levels={s.levels} design={s.design} title={`${s.name}: ${groundTier(s.level)}, ${DESIGN_INFO[s.design].label} style, ${formatNumber(s.capacity)} supporters`} />
         </div>
         <div className="absolute left-3 top-3 rounded-full bg-black/50 px-3 py-1 text-xs font-semibold text-white backdrop-blur sm:left-5 sm:top-5">
-          {DESIGN_INFO[s.design].label} · Level {s.level}
+          {groundTier(s.level)} · {DESIGN_INFO[s.design].label}
         </div>
       </section>
 
-      <section aria-label="Stadium stats" className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+      <section aria-label="Ground stats" className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
         {stats.map((st) => (
           <div key={st.label} className="rounded-2xl border bg-card/70 p-4 backdrop-blur">
             <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{st.label}</p>
@@ -70,7 +70,7 @@ async function StadiumContent() {
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="upgrades-heading" className="text-lg font-semibold">Upgrades</h2>
           <p className="text-sm text-muted-foreground">
-            {remaining > 0 ? <>Fully upgrading costs another <Coins amount={remaining} className="text-gold" /></> : "Your stadium is complete!"}
+            {remaining > 0 ? <>Fully upgrading costs another <Coins amount={remaining} className="text-gold" /></> : "Your ground is complete — a true neighbourhood fortress!"}
           </p>
         </div>
         <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -113,7 +113,7 @@ async function StadiumContent() {
 
 function StadiumSkeleton() {
   return (
-    <div className="space-y-4" aria-busy="true" aria-label="Loading stadium">
+    <div className="space-y-4" aria-busy="true" aria-label="Loading your ground">
       <Skeleton className="h-12 w-72" />
       <Skeleton className="aspect-[320/140] rounded-3xl" />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}</div>

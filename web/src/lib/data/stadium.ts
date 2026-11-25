@@ -9,7 +9,7 @@ export async function getStadium(userId: string) {
   const [stadium, costs, history] = await Promise.all([
     supabase
       .from("stadiums")
-      .select("id, name, design_template, capacity, stadium_level, seating_level, lighting_level, pitch_level, facilities_level, created_at")
+      .select("id, name, area, design_template, capacity, stadium_level, seating_level, lighting_level, pitch_level, facilities_level, created_at")
       .eq("user_id", userId)
       .single(),
     supabase.from("stadium_upgrade_costs").select("category, level, cost, bonus_pct, description").order("category").order("level"),
@@ -30,6 +30,7 @@ export async function getStadium(userId: string) {
   return {
     id: s.id,
     name: s.name,
+    area: s.area,
     design: s.design_template as StadiumDesign,
     capacity: s.capacity ?? 0,
     level: s.stadium_level ?? 1,

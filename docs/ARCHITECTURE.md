@@ -312,6 +312,12 @@ replay (`data-match-live`) so the reward can't spoil the result.
   change the past. Chunked play is proven identical to a one-shot replay (unit-tested), and replay
   verification includes the orders. The screen shows a pre-match scouting report, a 2D pitch (formation
   dots shifting with possession), the touchline panel with stamina bars, and key-moment cards.
+- **Neighbourhood theme.** The stadium is now the club's *home ground* (route `/stadium` kept): tiers by
+  level from street court to neighbourhood fortress, themed upgrade descriptions (stands & supporters,
+  floodlights, surface, clubhouse) and four neighbourhood styles; mechanics, costs and bonuses are
+  unchanged. Clubs may set a public `stadiums.area` (Latin/Greek letters, 2–30, owner-updatable column)
+  used by `get_area_table` (wins per area, grouped case-insensitively) and `get_manager_area`
+  (local-derby badge on challenges, area on profiles).
 
 ## 3. Database schema
 

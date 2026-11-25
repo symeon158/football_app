@@ -141,7 +141,7 @@ check("dashboard renders for signed-in user", dash.status === 200);
 check("dashboard shows username", dashHtml.includes(user.username));
 check("dashboard shows 1,000 FC", dashHtml.includes("1,000"));
 check("dashboard shows team and rating", dashHtml.includes(`${user.username} FC`) && dashHtml.includes("Team rating"));
-for (const section of ["Latest player cards", "Challenges", "Recent results", "Stadium", "Manager level"]) {
+for (const section of ["Latest player cards", "Challenges", "Recent results", "Home ground", "Manager level"]) {
   check(`dashboard has "${section}" section`, dashHtml.includes(section));
 }
 check("dashboard renders 6 player cards", (dashHtml.match(/<article aria-label=/g) ?? []).length === 6);
@@ -274,7 +274,7 @@ check("ledger sum equals wallet balance", ledger.reduce((a, r) => a + r.amount, 
 
 // Phase 6: stadium builder
 const stHtml = await (await get("/stadium")).text();
-check("stadium page renders upgrades", stHtml.includes("Stadium builder") && stHtml.includes("Construction history") && stHtml.includes("5,000 seats"));
+check("home ground page renders upgrades", stHtml.includes("Home ground") && stHtml.includes("Street court") && stHtml.includes("Construction history") && stHtml.includes("Supporters"));
 const balBefore = (await sb.from("wallets").select("balance").single()).data.balance;
 const { data: lightCost } = await sb.from("stadium_upgrade_costs").select("cost").eq("category", "lighting").eq("level", 2).single();
 const upKey = crypto.randomUUID();
@@ -287,12 +287,16 @@ const { error: staleErr } = await sb.rpc("upgrade_stadium", { p_category: "light
 check("stale expected level is refused", staleErr?.message === "STADIUM_LEVEL_CHANGED", staleErr?.message);
 const { error: directLvl } = await sb.from("stadiums").update({ seating_level: 5 }).eq("user_id", uid);
 check("stadium levels cannot be set directly", Boolean(directLvl), "update succeeded!");
-const { error: renameErr } = await sb.from("stadiums").update({ name: "Smoke Park", design_template: "fortress" }).eq("user_id", uid);
+const { error: renameErr } = await sb.from("stadiums").update({ name: "Smoke Park", design_template: "fortress", area: "Smoke Hill" }).eq("user_id", uid);
 // React separates adjacent text nodes with <!-- --> in HTML; users never see them.
 const visibleText = (html) => html.replaceAll("<!-- -->", "");
 const st2 = visibleText(await (await get("/stadium")).text());
-check("rename + design change show on the page", !renameErr && st2.includes("Smoke Park") && st2.includes("Fortress · Level"), renameErr?.message);
-check("construction history lists the upgrade", st2.includes("Lighting</span> 1 → 2"));
+check("rename, style and neighbourhood show on the page", !renameErr && st2.includes("Smoke Park") && st2.includes("Harbour") && st2.includes("Smoke Hill"), renameErr?.message);
+check("construction history lists the upgrade", st2.includes("Floodlights</span> 1 → 2"));
+const { error: badArea } = await sb.from("stadiums").update({ area: "<b>x</b>" }).eq("user_id", uid);
+check("a neighbourhood name with symbols is refused", Boolean(badArea), "update succeeded!");
+const areasHtml = visibleText(await (await get("/leaderboards?board=areas&period=all")).text());
+check("the neighbourhood table lists the area", areasHtml.includes("Smoke Hill") && areasHtml.includes("Neighbourhoods"));
 
 // Phase 7: match engine
 const centre = await (await get("/matches")).text();

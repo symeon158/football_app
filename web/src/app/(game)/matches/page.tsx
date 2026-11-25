@@ -1,4 +1,4 @@
-import { Swords, Trophy } from "lucide-react";
+import { Gamepad2, Swords, Trophy } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -63,6 +63,16 @@ async function MatchesContent() {
       </section>
 
       <div className="space-y-4 sm:space-y-6">
+        <Panel title="Play it yourself">
+          <p className="text-sm text-muted-foreground">
+            Take control on the pitch with a controller or keyboard. <span className="font-medium text-gold">Beta</span> — results
+            aren&apos;t saved and don&apos;t pay coins yet.
+          </p>
+          <Link href="/matches/play" className={cn(buttonVariants({ variant: "outline" }), "mt-3 w-full gap-2")}>
+            <Gamepad2 className="size-4" /> Play a match yourself
+          </Link>
+        </Panel>
+
         <Panel title="Challenge a manager">
           <p className="text-sm text-muted-foreground">Play your friends&apos; real squads. They don&apos;t need to be online.</p>
           <Link href="/matches/challenge" className={cn(buttonVariants(), "mt-3 w-full gap-2")}>

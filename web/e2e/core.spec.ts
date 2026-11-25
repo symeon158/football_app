@@ -143,6 +143,28 @@ test.describe("Football Legends — core journeys", () => {
     await other.close();
   });
 
+  test("play it yourself: kick off, control a player with the keyboard, pause", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await signUp(page, "ply");
+    await page.goto("/matches");
+    await page.getByRole("link", { name: "Play a match yourself" }).click();
+    await page.waitForURL("**/matches/play");
+    await page.getByRole("button", { name: "Kick off" }).click();
+    await page.keyboard.down("KeyD");
+    await page.keyboard.down("ShiftLeft");
+    await page.waitForTimeout(2500);
+    await page.keyboard.press("KeyJ");
+    await page.keyboard.up("KeyD");
+    await page.keyboard.up("ShiftLeft");
+    await expect(page.getByText(/^[1-9]d*'$/)).toBeVisible({ timeout: 15_000 }); // the match clock is running
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("heading", { name: "Paused" })).toBeVisible();
+    await page.getByRole("button", { name: "Resume" }).first().click();
+    await expect(page.getByRole("heading", { name: "Paused" })).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
   test("forgot password: e-mailed link lets the player choose a new password", async ({ page, context }) => {
     const { username, password } = await signUp(page);
     const email = `${username}@example.test`;

@@ -291,6 +291,13 @@ replay (`data-match-live`) so the reward can't spoil the result.
   RLS lets the opponent read matches against their club; when they delete their account a
   SECURITY DEFINER trigger renames those matches to "Deleted club" and unlinks them.
   UI word: *challenge* (a "friendly" remains an unpaid match after the daily allowance).
+- **Play it yourself (beta, step 1).** `/matches/play` is a real-time, top-down match controlled with
+  a game controller (browser Gamepad API, standard mapping) or the keyboard. `lib/play/sim.ts` is a
+  pure, fixed-tick (60 Hz) simulation with a seeded RNG and no trigonometry, so identical inputs replay
+  identically (unit-tested) — the basis for later server verification of input logs (step 3). Card stats
+  drive pace, shot power/accuracy, pass accuracy, tackles and keeping; the computer controls teammates
+  and the opponent. `input.ts` latches presses at keydown so sub-frame taps count; `render.ts` draws
+  the pitch on a canvas with a following camera and radar. Results are not saved and pay nothing yet.
 
 ## 3. Database schema
 

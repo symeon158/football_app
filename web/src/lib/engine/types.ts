@@ -39,6 +39,24 @@ export type MatchInput = {
   homeBonusPct: number; // stadium home advantage, 0–15
   /** Interactive match: pauses at key moments for the home manager's decisions. Absent on older matches. */
   keyMoments?: boolean;
+  /** Matchday mode (implies key moments): touchline orders at any minute, fatigue, no automatic home subs. */
+  matchday?: boolean;
+};
+
+/** A touchline order. It is given at a revealed minute and applies from the next minute on. */
+export type MatchOrder =
+  | { minute: number; kind: "tactic"; value: Tactic }
+  | { minute: number; kind: "shout"; value: "press" | "possession" }
+  | { minute: number; kind: "sub"; off: string; on: string };
+
+/** The home side as the manager sees it during a matchday game. */
+export type HomeState = {
+  tactic: Tactic;
+  onPitch: { id: string | null; name: string; position: string; overall: number; stamina: number; yellow: boolean }[];
+  bench: { id: string | null; name: string; position: string; overall: number }[];
+  subsLeft: number;
+  shout: { value: "press" | "possession"; until: number } | null;
+  shoutReadyAt: number;
 };
 
 export type KeyMomentKind = "chance" | "penalty" | "team_talk" | "late_call";
@@ -56,7 +74,17 @@ export type KeyMoment = {
 /** Result of advancing an interactive match with the decisions made so far. */
 export type LiveStep =
   | { done: true; result: MatchResult }
-  | { done: false; events: MatchEvent[]; score: { home: number; away: number }; moment: KeyMoment };
+  | {
+      done: false;
+      events: MatchEvent[];
+      score: { home: number; away: number };
+      /** The decision being waited for, or null when paused at `minute` (matchday chunks). */
+      moment: KeyMoment | null;
+      minute: number;
+      home: HomeState;
+      /** Which side had the ball in each minute played so far (for the 2D view). */
+      possession: { minute: number; side: Side }[];
+    };
 
 export type EventType = "kickoff" | "goal" | "chance" | "save" | "yellow_card" | "red_card" | "substitution" | "half_time" | "full_time";
 

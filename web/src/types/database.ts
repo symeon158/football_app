@@ -197,14 +197,14 @@ isOneToOne: false
                   ]
                 },"matches": {
                   Row: {
-                    "away_score": number,"completed_at": string | null,"created_at": string,"decisions": NonNullable<Json>,"difficulty": string,"engine_version": string,"home_score": number,"id": string,"idempotency_key": string | null,"opponent_name": string,"opponent_rating": number,"opponent_team_id": string | null,"opponent_user_id": string | null,"reward_coins": number,"rewarded": boolean,"seed": number,"stats": NonNullable<Json>,"status": Database["public"]['Enums']["match_status"],"tactic": Database["public"]['Enums']["match_tactic"],"team_id": string | null,"team_snapshot": NonNullable<Json>,"user_id": string,"xp_gained": number
+                    "away_score": number,"completed_at": string | null,"created_at": string,"decisions": NonNullable<Json>,"difficulty": string,"engine_version": string,"home_score": number,"id": string,"idempotency_key": string | null,"opponent_name": string,"opponent_rating": number,"opponent_team_id": string | null,"opponent_user_id": string | null,"orders": NonNullable<Json>,"revealed_minute": number,"reward_coins": number,"rewarded": boolean,"seed": number,"stats": NonNullable<Json>,"status": Database["public"]['Enums']["match_status"],"tactic": Database["public"]['Enums']["match_tactic"],"team_id": string | null,"team_snapshot": NonNullable<Json>,"user_id": string,"xp_gained": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "away_score"?: number,"completed_at"?: string | null,"created_at"?: string,"decisions"?: NonNullable<Json>,"difficulty"?: string,"engine_version": string,"home_score"?: number,"id"?: string,"idempotency_key"?: string | null,"opponent_name": string,"opponent_rating": number,"opponent_team_id"?: string | null,"opponent_user_id"?: string | null,"reward_coins"?: number,"rewarded"?: boolean,"seed": number,"stats"?: NonNullable<Json>,"status"?: Database["public"]['Enums']["match_status"],"tactic": Database["public"]['Enums']["match_tactic"],"team_id"?: string | null,"team_snapshot"?: NonNullable<Json>,"user_id": string,"xp_gained"?: number
+                    "away_score"?: number,"completed_at"?: string | null,"created_at"?: string,"decisions"?: NonNullable<Json>,"difficulty"?: string,"engine_version": string,"home_score"?: number,"id"?: string,"idempotency_key"?: string | null,"opponent_name": string,"opponent_rating": number,"opponent_team_id"?: string | null,"opponent_user_id"?: string | null,"orders"?: NonNullable<Json>,"revealed_minute"?: number,"reward_coins"?: number,"rewarded"?: boolean,"seed": number,"stats"?: NonNullable<Json>,"status"?: Database["public"]['Enums']["match_status"],"tactic": Database["public"]['Enums']["match_tactic"],"team_id"?: string | null,"team_snapshot"?: NonNullable<Json>,"user_id": string,"xp_gained"?: number
                   }
                   Update: {
-                    "away_score"?: number,"completed_at"?: string | null,"created_at"?: string,"decisions"?: NonNullable<Json>,"difficulty"?: string,"engine_version"?: string,"home_score"?: number,"id"?: string,"idempotency_key"?: string | null,"opponent_name"?: string,"opponent_rating"?: number,"opponent_team_id"?: string | null,"opponent_user_id"?: string | null,"reward_coins"?: number,"rewarded"?: boolean,"seed"?: number,"stats"?: NonNullable<Json>,"status"?: Database["public"]['Enums']["match_status"],"tactic"?: Database["public"]['Enums']["match_tactic"],"team_id"?: string | null,"team_snapshot"?: NonNullable<Json>,"user_id"?: string,"xp_gained"?: number
+                    "away_score"?: number,"completed_at"?: string | null,"created_at"?: string,"decisions"?: NonNullable<Json>,"difficulty"?: string,"engine_version"?: string,"home_score"?: number,"id"?: string,"idempotency_key"?: string | null,"opponent_name"?: string,"opponent_rating"?: number,"opponent_team_id"?: string | null,"opponent_user_id"?: string | null,"orders"?: NonNullable<Json>,"revealed_minute"?: number,"reward_coins"?: number,"rewarded"?: boolean,"seed"?: number,"stats"?: NonNullable<Json>,"status"?: Database["public"]['Enums']["match_status"],"tactic"?: Database["public"]['Enums']["match_tactic"],"team_id"?: string | null,"team_snapshot"?: NonNullable<Json>,"user_id"?: string,"xp_gained"?: number
                   }
                   Relationships: [
                     {
@@ -626,6 +626,12 @@ isOneToOne: false
                            },
 "record_match_decision":
 { Args: { "p_choice": string,"p_index": number,"p_match": string,"p_user_id": string }; Returns: undefined
+                           },
+"record_match_order":
+{ Args: { "p_match": string,"p_minute": number,"p_order": Json,"p_user_id": string }; Returns: undefined
+                           },
+"reveal_match_minute":
+{ Args: { "p_match": string,"p_minute": number,"p_user_id": string }; Returns: number
                            },
 "save_lineup":
 { Args: { "p_captain": string,"p_formation": Database["public"]['Enums']["formation_code"],"p_slots": Json,"p_tactic": Database["public"]['Enums']["match_tactic"],"p_team_id": string }; Returns: undefined

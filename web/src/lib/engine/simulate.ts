@@ -5,10 +5,12 @@ import { Rng } from "./rng";
 import {
   ENGINE_VERSION,
   type EnginePlayer,
+  type HomeState,
   type KeyMoment,
   type LiveStep,
   type MatchEvent,
   type MatchInput,
+  type MatchOrder,
   type MatchResult,
   type PlayerRating,
   type Side,
@@ -54,7 +56,11 @@ const TACTIC = {
   defensive: { attack: 0.95, defence: 1.05, chances: 0.92 },
 } as const;
 
-type OnPitch = { slotPosition: Position; player: EnginePlayer; yellow: boolean; sentOff: boolean; minuteOn: number; minuteOff: number | null };
+type OnPitch = { slotPosition: Position; player: EnginePlayer; yellow: boolean; sentOff: boolean; minuteOn: number; minuteOff: number | null; stamina: number };
+
+/** Strength multipliers from touchline shouts (matchday mode). */
+type Mods = { attack: number; defence: number; midfield: number; chances: number };
+const NO_MODS: Mods = { attack: 1, defence: 1, midfield: 1, chances: 1 };
 
 type Live = {
   side: Side;
@@ -69,11 +75,13 @@ type Live = {
 };
 
 const avg = (xs: number[], fallback: number) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : fallback);
-const eff = (p: OnPitch) => effectiveRating({ slotPosition: p.slotPosition, cardPosition: p.player.position, overall: p.player.overall });
+const effBase = (p: OnPitch) => effectiveRating({ slotPosition: p.slotPosition, cardPosition: p.player.position, overall: p.player.overall });
 const active = (t: Live) => t.pitch.filter((p) => !p.sentOff);
 
-function strengths(t: Live, homeBonusPct: number) {
+function strengths(t: Live, homeBonusPct: number, fatigue = false, mods: Mods = NO_MODS) {
   const on = active(t);
+  // Matchday mode: tired players play below their rating (down to 85% when exhausted).
+  const eff = fatigue ? (p: OnPitch) => effBase(p) * (0.85 + (0.15 * p.stamina) / 100) : effBase;
   const line = (l: "GK" | "DEF" | "MID" | "ATT") => on.filter((p) => LINE_OF[p.slotPosition] === l);
   const att = line("ATT"), mid = line("MID"), def = line("DEF"), gk = line("GK");
 
@@ -94,16 +102,16 @@ function strengths(t: Live, homeBonusPct: number) {
     Math.pow(on.length / 11, 0.5);
 
   return {
-    attack: attackScore * m * tac.attack,
-    midfield: midScore * m,
-    defence: (0.8 * defenceScore + 0.2 * gkScore) * m * tac.defence,
+    attack: attackScore * m * tac.attack * mods.attack,
+    midfield: midScore * m * mods.midfield,
+    defence: (0.8 * defenceScore + 0.2 * gkScore) * m * tac.defence * mods.defence,
     gk: gkScore * m,
-    chanceMultiplier: tac.chances,
+    chanceMultiplier: tac.chances * mods.chances,
   };
 }
 
 function initLive(side: Side, sheet: TeamSheet, rng: Rng): Live {
-  const pitch = sheet.starters.map((s) => ({ slotPosition: s.slotPosition, player: s.player, yellow: false, sentOff: false, minuteOn: 0, minuteOff: null }));
+  const pitch = sheet.starters.map((s) => ({ slotPosition: s.slotPosition, player: s.player, yellow: false, sentOff: false, minuteOn: 0, minuteOff: null, stamina: 100 }));
   const subs = Math.min(3, sheet.bench.length);
   const subMinutes = Array.from({ length: subs }, () => rng.int(56, 84)).sort((a, b) => a - b);
   const live: Live = {
@@ -121,6 +129,12 @@ const LINE_CARD_WEIGHT = { GK: 0.2, DEF: 2, MID: 1.5, ATT: 0.9 } as const;
 class PendingMoment {
   constructor(readonly moment: KeyMoment) {}
 }
+/** Thrown when a matchday chunk reaches the minute the server has revealed so far. */
+class PausedAt {
+  constructor(readonly minute: number) {}
+}
+const eff = effBase;
+const MAX_SUBS = 5;
 
 const TEAM_TALK: KeyMoment["options"] = [
   { id: "balanced", label: "Keep it balanced", hint: "No change in approach" },
@@ -129,8 +143,8 @@ const TEAM_TALK: KeyMoment["options"] = [
 ];
 
 /** A whole match. For interactive matches every decision must be supplied. */
-export function simulateMatch(input: MatchInput, decisions: readonly string[] = []): MatchResult {
-  const step = playMatch(input, decisions);
+export function simulateMatch(input: MatchInput, decisions: readonly string[] = [], orders: readonly MatchOrder[] = []): MatchResult {
+  const step = playMatch(input, decisions, { orders });
   if (!step.done) throw new Error("PENDING_DECISION");
   return step.result;
 }
@@ -140,7 +154,11 @@ export function simulateMatch(input: MatchInput, decisions: readonly string[] = 
  * simulation and never pauses. With it, the home manager decides at up to six key moments: the
  * half-time team talk, a late call at 75', up to three big chances and possibly a penalty.
  */
-export function playMatch(input: MatchInput, decisions: readonly string[] = []): LiveStep {
+export function playMatch(
+  input: MatchInput,
+  decisions: readonly string[] = [],
+  opts: { orders?: readonly MatchOrder[]; untilMinute?: number } = {},
+): LiveStep {
   const rng = new Rng(input.seed);
   const home = initLive("home", input.home, rng);
   const away = initLive("away", input.away, rng);
@@ -155,7 +173,53 @@ export function playMatch(input: MatchInput, decisions: readonly string[] = []):
     events.push({ playerId: null, playerName: null, assistId: null, assistName: null, detail: null, ...e });
 
   /* ------------------------------------------------------------ key moments */
-  const interactive = Boolean(input.keyMoments);
+  const interactive = Boolean(input.keyMoments || input.matchday);
+  const matchday = Boolean(input.matchday);
+  const orders = matchday ? opts.orders ?? [] : [];
+  const untilMinute = matchday ? opts.untilMinute ?? 90 : 90;
+  let orderIndex = 0, subsUsed = 0, currentMinute = 0;
+  let shout: { value: "press" | "possession"; until: number } | null = null;
+  let shoutReadyAt = 0;
+  const possession: { minute: number; side: Side }[] = [];
+  const pressingAt = (minute: number) => shout !== null && shout.value === "press" && minute <= shout.until;
+  const homeMods = (minute: number): Mods =>
+    !shout || minute > shout.until
+      ? NO_MODS
+      : shout.value === "press"
+        ? { attack: 1.04, defence: 1.03, midfield: 1, chances: 1.03 }
+        : { attack: 0.98, defence: 1.02, midfield: 1.06, chances: 0.95 };
+  const homeState = (): HomeState => ({
+    tactic: home.sheet.tactic,
+    onPitch: active(home).map((p) => ({ id: p.player.id, name: p.player.name, position: p.slotPosition, overall: p.player.overall, stamina: Math.round(p.stamina), yellow: p.yellow })),
+    bench: home.bench.map((b) => ({ id: b.id, name: b.name, position: b.position, overall: b.overall })),
+    subsLeft: matchday ? MAX_SUBS - subsUsed : 0,
+    shout: shout && currentMinute <= shout.until ? { ...shout } : null,
+    shoutReadyAt,
+  });
+  /** Touchline orders given before `minute` take effect now (matchday mode). */
+  const applyOrders = (minute: number) => {
+    while (orderIndex < orders.length && orders[orderIndex].minute < minute) {
+      const o = orders[orderIndex++];
+      if (o.kind === "tactic") setTactic(home, o.value);
+      else if (o.kind === "shout") {
+        if (o.minute >= shoutReadyAt) {
+          shout = { value: o.value, until: o.minute + 10 };
+          shoutReadyAt = o.minute + 15;
+        }
+      } else if (o.kind === "sub" && subsUsed < MAX_SUBS) {
+        const off = active(home).find((p) => p.player.id === o.off);
+        const onIndex = home.bench.findIndex((b) => b.id === o.on);
+        if (!off || onIndex < 0) continue;
+        const best = home.bench.splice(onIndex, 1)[0];
+        off.minuteOff = minute;
+        const replacement: OnPitch = { slotPosition: off.slotPosition, player: best, yellow: false, sentOff: false, minuteOn: minute, minuteOff: null, stamina: 100 };
+        home.pitch[home.pitch.indexOf(off)] = replacement;
+        home.played.set(best, replacement);
+        subsUsed++;
+        push({ minute, type: "substitution", side: "home", playerId: best.id, playerName: best.name, assistId: off.player.id, assistName: off.player.name, detail: `${best.name} replaces ${off.player.name}` });
+      }
+    }
+  };
   const mrng = new Rng((input.seed ^ 0x2545f491) >>> 0); // decision outcomes only
   const penaltyMinute = interactive && mrng.chance(0.4) ? mrng.int(50, 86) : null;
   let momentIndex = 0, chanceMoments = 0, penaltyTaken = false, lateCallDone = false, lastChanceMoment = -99;
@@ -175,7 +239,7 @@ export function playMatch(input: MatchInput, decisions: readonly string[] = []):
 
   /** A home shot created at a key moment, resolved with the decision stream. */
   const homeShot = (minute: number, sh: OnPitch, q: number, assister: OnPitch | undefined) => {
-    const sH = strengths(home, input.homeBonusPct), sA = strengths(away, input.homeBonusPct);
+    const sH = strengths(home, input.homeBonusPct, matchday, homeMods(minute)), sA = strengths(away, input.homeBonusPct, matchday);
     if (!mrng.chance(TUNING.onTargetBase + q * TUNING.onTargetQuality)) {
       push({ minute, type: "chance", side: "home", playerId: sh.player.id, playerName: sh.player.name, detail: "Shot off target" });
       return;
@@ -265,7 +329,13 @@ export function playMatch(input: MatchInput, decisions: readonly string[] = []):
         continue;
       }
 
-      if (interactive && minute === 75 && !lateCallDone) {
+      if (matchday) {
+        applyOrders(minute);
+        if (minute > untilMinute) throw new PausedAt(untilMinute);
+      }
+      currentMinute = minute;
+
+      if (interactive && !matchday && minute === 75 && !lateCallDone) {
         lateCallDone = true;
         const diff = score.home - score.away;
         const call = ask({
@@ -289,7 +359,8 @@ export function playMatch(input: MatchInput, decisions: readonly string[] = []):
       }
 
       // Substitutions (both sides, in fixed order for determinism)
-      for (const t of [home, away]) {
+      for (const t of matchday ? [away] : [home, away]) {
+        // (In matchday mode the manager makes the home substitutions.)
         while (t.subMinutes.length && t.subMinutes[0] === minute) {
           t.subMinutes.shift();
           const candidates = active(t).filter((p) => p.slotPosition !== "GK");
@@ -304,20 +375,21 @@ export function playMatch(input: MatchInput, decisions: readonly string[] = []):
           t.bench.splice(t.bench.indexOf(best), 1);
           off.sentOff = false;
           off.minuteOff = minute;
-          const replacement: OnPitch = { slotPosition: off.slotPosition, player: best, yellow: false, sentOff: false, minuteOn: minute, minuteOff: null };
+          const replacement: OnPitch = { slotPosition: off.slotPosition, player: best, yellow: false, sentOff: false, minuteOn: minute, minuteOff: null, stamina: 100 };
           t.pitch[t.pitch.indexOf(off)] = replacement;
           t.played.set(best, replacement);
           push({ minute, type: "substitution", side: t.side, playerId: best.id, playerName: best.name, assistId: off.player.id, assistName: off.player.name, detail: `${best.name} replaces ${off.player.name}` });
         }
       }
 
-      const sH = strengths(home, input.homeBonusPct);
-      const sA = strengths(away, input.homeBonusPct);
+      const sH = strengths(home, input.homeBonusPct, matchday, homeMods(minute));
+      const sA = strengths(away, input.homeBonusPct, matchday);
       const pHome = 1 / (1 + Math.exp(-(sH.midfield - sA.midfield) / TUNING.possessionScale));
       const attSide: Side = rng.chance(pHome) ? "home" : "away";
       const atk = teams[attSide], def = teams[other(attSide)];
       const sAtk = attSide === "home" ? sH : sA, sDef = attSide === "home" ? sA : sH;
       atk.possessionMinutes++;
+      if (matchday) possession.push({ minute, side: attSide });
 
       // Chance creation
       const pChance = TUNING.chancePerMinute * sAtk.chanceMultiplier * Math.pow(sAtk.attack / Math.max(1, sDef.defence), TUNING.chanceExponent);
@@ -406,6 +478,14 @@ export function playMatch(input: MatchInput, decisions: readonly string[] = []):
         }
       }
 
+      // Fatigue (matchday mode): everyone tires; pressing tires the home side faster.
+      if (matchday) {
+        for (const t of [home, away]) {
+          const pressing = t === home && pressingAt(minute);
+          for (const p of active(t)) p.stamina = Math.max(0, p.stamina - (0.55 + (100 - p.player.physicality) / 180) * (pressing ? 1.5 : 1));
+        }
+      }
+
       // Penalty for the home side (interactive matches only, at most once).
       if (interactive && minute === penaltyMinute && !penaltyTaken) {
         penaltyTaken = true;
@@ -427,7 +507,12 @@ export function playMatch(input: MatchInput, decisions: readonly string[] = []):
       }
     }
   } catch (e) {
-    if (e instanceof PendingMoment) return { done: false, events: events.slice(), score: { ...score }, moment: e.moment };
+    if (e instanceof PendingMoment) {
+      return { done: false, events: events.slice(), score: { ...score }, moment: e.moment, minute: e.moment.minute, home: homeState(), possession: possession.slice() };
+    }
+    if (e instanceof PausedAt) {
+      return { done: false, events: events.slice(), score: { ...score }, moment: null, minute: e.minute, home: homeState(), possession: possession.slice() };
+    }
     throw e;
   }
 

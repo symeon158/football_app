@@ -12,7 +12,7 @@ import { DIFFICULTY_OFFSET, generateOpponent } from "@/lib/engine/opponent";
 import { randomSeed } from "@/lib/engine/rng";
 import { playMatch } from "@/lib/engine/simulate";
 import { buildTeamSheet } from "@/lib/engine/team-sheet";
-import { ENGINE_VERSION, type MatchInput, type MatchResult } from "@/lib/engine/types";
+import { ENGINE_VERSION, type MatchInput, type MatchOrder, type MatchResult } from "@/lib/engine/types";
 import { toUserMessage } from "@/lib/errors";
 import { homeBonus } from "@/lib/game/stadium";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -84,7 +84,7 @@ export async function kickOff(_prev: KickoffState, form: FormData): Promise<Kick
     away = generateOpponent(seed, opponentRating);
   }
   const homeBonusPct = homeBonus(stadium.levels, stadium.costs);
-  const input: MatchInput = { seed, home: built.sheet, away, homeBonusPct, keyMoments: true };
+  const input: MatchInput = { seed, home: built.sheet, away, homeBonusPct, matchday: true };
 
   const admin = createAdminClient();
   const { data: matchId, error } = await admin.rpc("start_match", {
@@ -118,31 +118,53 @@ export async function kickOff(_prev: KickoffState, form: FormData): Promise<Kick
 
 export type MomentResult = { ok: true; done: boolean; segment: LiveSegment | null } | { ok: false; message: string };
 
+const matchIdSchema = z.uuid();
 const decisionSchema = z.object({
   matchId: z.uuid(),
   index: z.number().int().min(0).max(9),
   choice: z.string().regex(/^[a-z_]{2,20}$/),
 });
+const orderSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("tactic"), value: z.enum(["balanced", "attacking", "defensive"]) }),
+  z.object({ kind: z.literal("shout"), value: z.enum(["press", "possession"]) }),
+  z.object({ kind: z.literal("sub"), off: z.uuid(), on: z.uuid() }),
+]);
+export type OrderInput = z.infer<typeof orderSchema>;
+
+const NOT_FOUND = { ok: false as const, message: "This match could not be found." };
 
 /**
- * The manager's decision at a key moment. It is stored BEFORE the outcome is
- * computed, so a moment can't be retried; then the match advances to the next
- * moment or, at full time, is settled (rewards are paid by the database).
+ * Shows more of the match: plays it on the server up to `toMinute` (or the next key
+ * moment) and records how far it has been revealed, so orders can never reach back.
+ */
+export async function advanceMatch(matchId: string, toMinute: number): Promise<MomentResult> {
+  if (!matchIdSchema.safeParse(matchId).success || !Number.isFinite(toMinute)) return NOT_FOUND;
+  const userId = await getUserId();
+  if (!userId) return { ok: false, message: toUserMessage({ message: "NOT_AUTHENTICATED" }) };
+  const match = await loadLiveMatch(userId, matchId);
+  if (!match) return NOT_FOUND;
+  if (match.done) return { ok: true, done: true, segment: null };
+  return advance(userId, matchId, match, Math.min(90, Math.max(match.revealed, Math.floor(toMinute))));
+}
+
+/**
+ * The manager's decision at a key moment. It is stored BEFORE the outcome is computed,
+ * so a moment can't be retried; the match then continues from that minute.
  */
 export async function decideMoment(matchId: string, index: number, choice: string): Promise<MomentResult> {
   const parsed = decisionSchema.safeParse({ matchId, index, choice });
   if (!parsed.success) return { ok: false, message: "That choice isn't available." };
   const userId = await getUserId();
   if (!userId) return { ok: false, message: toUserMessage({ message: "NOT_AUTHENTICATED" }) };
-
   const match = await loadLiveMatch(userId, parsed.data.matchId);
-  if (!match) return { ok: false, message: "This match could not be found." };
+  if (!match) return NOT_FOUND;
   if (match.done) return { ok: true, done: true, segment: null };
 
-  const step = playMatch(match.input, match.decisions);
   const already = parsed.data.index < match.decisions.length && match.decisions[parsed.data.index] === parsed.data.choice;
   if (!already) {
-    if (step.done || step.moment.index !== parsed.data.index || !step.moment.options.some((o) => o.id === parsed.data.choice)) {
+    const step = playMatch(match.input, match.decisions, { orders: match.orders, untilMinute: match.revealed });
+    const moment = step.done ? null : step.moment;
+    if (!moment || moment.index !== parsed.data.index || !moment.options.some((o) => o.id === parsed.data.choice)) {
       return { ok: false, message: "That choice isn't available any more. Reloading the match…" };
     }
     const { error } = await createAdminClient().rpc("record_match_decision", {
@@ -154,49 +176,95 @@ export async function decideMoment(matchId: string, index: number, choice: strin
     if (error) return { ok: false, message: toUserMessage(error) };
     match.decisions.push(parsed.data.choice);
   }
-  return advance(userId, parsed.data.matchId, match.input, match.decisions, match.stats);
+  return advance(userId, parsed.data.matchId, match, match.revealed);
 }
 
-/** Continues a match that has every decision (e.g. after a dropped connection): settles it. */
-export async function resumeMatch(matchId: string): Promise<MomentResult> {
-  if (!z.uuid().safeParse(matchId).success) return { ok: false, message: "This match could not be found." };
+/** A touchline order (tactic, shout, substitution): applies from the next minute. */
+export async function giveOrder(matchId: string, order: OrderInput): Promise<MomentResult> {
+  const parsed = orderSchema.safeParse(order);
+  if (!matchIdSchema.safeParse(matchId).success || !parsed.success) return { ok: false, message: "That instruction isn't valid." };
   const userId = await getUserId();
   if (!userId) return { ok: false, message: toUserMessage({ message: "NOT_AUTHENTICATED" }) };
   const match = await loadLiveMatch(userId, matchId);
-  if (!match) return { ok: false, message: "This match could not be found." };
-  if (match.done) return { ok: true, done: true, segment: null };
-  return advance(userId, matchId, match.input, match.decisions, match.stats);
+  if (!match) return NOT_FOUND;
+  if (match.done || !match.input.matchday) return { ok: false, message: "The match is over." };
+
+  const step = playMatch(match.input, match.decisions, { orders: match.orders, untilMinute: match.revealed });
+  if (step.done) return { ok: false, message: "The match is over." };
+  if (step.moment) return { ok: false, message: "Make the key-moment decision first." };
+  const o = parsed.data;
+  const h = step.home;
+  if (o.kind === "shout" && step.minute < h.shoutReadyAt) return { ok: false, message: `The players need a moment — shout again from ${h.shoutReadyAt}'.` };
+  if (o.kind === "tactic" && o.value === h.tactic) return { ok: true, done: false, segment: liveSegment(step) };
+  if (o.kind === "sub") {
+    if (h.subsLeft <= 0) return { ok: false, message: "You've used all your substitutions." };
+    if (!h.onPitch.some((p) => p.id === o.off) || !h.bench.some((b) => b.id === o.on)) {
+      return { ok: false, message: "Pick a player on the pitch and one from the bench." };
+    }
+  }
+
+  const { error } = await createAdminClient().rpc("record_match_order", {
+    p_user_id: userId,
+    p_match: matchId,
+    p_minute: match.revealed,
+    p_order: o,
+  });
+  if (error) return { ok: false, message: toUserMessage(error) };
+  match.orders.push({ ...o, minute: match.revealed } as MatchOrder);
+  return advance(userId, matchId, match, match.revealed);
 }
 
-async function loadLiveMatch(userId: string, matchId: string) {
+/** Continues a match that has nothing left to decide (e.g. after a dropped connection). */
+export async function resumeMatch(matchId: string): Promise<MomentResult> {
+  return advanceMatch(matchId, 90);
+}
+
+type LiveRow = {
+  done: boolean;
+  input: MatchInput;
+  decisions: string[];
+  orders: MatchOrder[];
+  revealed: number;
+  stats: Record<string, unknown>;
+};
+
+async function loadLiveMatch(userId: string, matchId: string): Promise<LiveRow | null> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("matches")
-    .select("status, team_snapshot, decisions, stats")
+    .select("status, team_snapshot, decisions, orders, revealed_minute, stats")
     .eq("id", matchId)
-    .eq("user_id", userId) // only the manager who kicked off can decide
+    .eq("user_id", userId) // only the manager who kicked off can play it
     .maybeSingle();
   if (!data) return null;
   return {
     done: data.status === "completed",
     input: data.team_snapshot as unknown as MatchInput,
     decisions: [...((data.decisions as string[] | null) ?? [])],
+    orders: [...((data.orders as unknown as MatchOrder[] | null) ?? [])],
+    revealed: data.revealed_minute,
     stats: (data.stats ?? {}) as Record<string, unknown>,
   };
 }
 
-async function advance(userId: string, matchId: string, input: MatchInput, decisions: string[], baseStats: Record<string, unknown>): Promise<MomentResult> {
-  const step = playMatch(input, decisions);
-  if (!step.done) return { ok: true, done: false, segment: liveSegment(step) };
-
-  const { error } = await createAdminClient().rpc("finish_match", {
+async function advance(userId: string, matchId: string, match: LiveRow, target: number): Promise<MomentResult> {
+  const step = playMatch(match.input, match.decisions, { orders: match.orders, untilMinute: target });
+  const admin = createAdminClient();
+  if (!step.done) {
+    // Record how far the manager has now seen BEFORE showing it.
+    if (step.minute > match.revealed) {
+      const { error } = await admin.rpc("reveal_match_minute", { p_user_id: userId, p_match: matchId, p_minute: step.minute });
+      if (error) return { ok: false, message: toUserMessage(error) };
+    }
+    return { ok: true, done: false, segment: liveSegment(step) };
+  }
+  const { error } = await admin.rpc("finish_match", {
     p_user_id: userId,
     p_match: matchId,
-    p_payload: resultPayload(step.result, baseStats),
+    p_payload: resultPayload(step.result, match.stats),
   });
   if (error) return { ok: false, message: toUserMessage(error) };
-  // Keep the top bar's coins/XP current (the final screen masks them until revealed).
-  refresh();
+  refresh(); // the top bar's coins/XP (masked on screen until the result is revealed)
   return { ok: true, done: true, segment: null };
 }
 

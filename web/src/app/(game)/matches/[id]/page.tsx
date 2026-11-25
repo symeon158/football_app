@@ -45,12 +45,13 @@ async function MatchContent({ params, searchParams }: Pick<PageProps<"/matches/[
     }
     return (
       <LiveMatch
-        key={match.decisions.length}
         matchId={match.id}
         homeName={match.homeName}
         awayName={match.opponent_name}
         initial={match.live?.segment ?? null}
         needsFinish={match.live?.needsFinish ?? false}
+        matchday={match.matchday}
+        scouting={match.scouting}
       />
     );
   }

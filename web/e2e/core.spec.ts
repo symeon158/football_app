@@ -71,13 +71,21 @@ test.describe("Football Legends — core journeys", () => {
     await expect(page.locator("tbody tr")).toHaveCount(4); // welcome, buy, pack, stadium
   });
 
-  test("match: key moments, reward hidden until full time, result verified", async ({ page }) => {
+  test("matchday: pre-match, touchline orders, key moments, verified result", async ({ page }) => {
     await signUp(page);
     await page.goto("/matches");
     await page.getByRole("button", { name: "Kick off" }).click();
     await page.waitForURL(/\/matches\/[0-9a-f-]{36}$/);
     await expect(page.locator('header [class*="border-gold/30"]').first()).toBeHidden();
-    await expect(page.getByRole("dialog").getByText(/^Key moment/)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("heading", { name: /vs/ })).toBeVisible(); // pre-match scouting
+    await page.getByRole("button", { name: "Start match" }).click();
+    // A substitution and a tactic change from the touchline.
+    await page.locator('ul[aria-label="On the pitch"] button').first().click();
+    await page.locator('ul[aria-label="Bench"] button').first().click();
+    await page.getByRole("button", { name: "Make substitution" }).click();
+    await expect(page.getByText("Substitutions · 4 left")).toBeVisible({ timeout: 30_000 });
+    await page.getByRole("button", { name: "Attacking" }).click();
+    await expect(page.getByRole("button", { name: "Attacking" })).toBeDisabled({ timeout: 30_000 }); // now the active tactic
     await playKeyMoments(page);
     await skipToResult(page);
     await expect(page.getByText("Man of the match")).toBeVisible();

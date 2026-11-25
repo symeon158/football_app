@@ -2,7 +2,7 @@ import "server-only";
 
 import { liveSegment } from "@/lib/engine/live";
 import { playMatch, simulateMatch } from "@/lib/engine/simulate";
-import type { MatchInput, PlayerRating, TeamStats } from "@/lib/engine/types";
+import type { MatchInput, MatchOrder, PlayerRating, TeamStats } from "@/lib/engine/types";
 import { ENGINE_VERSION } from "@/lib/engine/types";
 import { buildTeamSheet } from "@/lib/engine/team-sheet";
 import { getStadium } from "@/lib/data/stadium";
@@ -89,7 +89,7 @@ export async function getMatch(matchId: string) {
   const [match, events] = await Promise.all([
     supabase
       .from("matches")
-      .select("id, user_id, opponent_user_id, status, decisions, team_id, team_snapshot, opponent_name, opponent_rating, tactic, difficulty, seed, engine_version, home_score, away_score, stats, reward_coins, xp_gained, rewarded, completed_at, challenger:profiles!matches_user_id_fkey(username), opponent:profiles!matches_opponent_user_id_fkey(username)")
+      .select("id, user_id, opponent_user_id, status, decisions, orders, revealed_minute, team_id, team_snapshot, opponent_name, opponent_rating, tactic, difficulty, seed, engine_version, home_score, away_score, stats, reward_coins, xp_gained, rewarded, completed_at, challenger:profiles!matches_user_id_fkey(username), opponent:profiles!matches_opponent_user_id_fkey(username)")
       .eq("id", matchId)
       .maybeSingle(),
     supabase
@@ -106,19 +106,34 @@ export async function getMatch(matchId: string) {
   const snapshot = m.team_snapshot as unknown as MatchInput;
   const homeName = snapshot?.home?.name ?? "Home";
   const decisions = ((m.decisions as string[] | null) ?? []).slice();
+  const orders = ((m.orders as unknown as MatchOrder[] | null) ?? []).slice();
   if (m.status === "in_progress") {
-    // Not finished yet: where the match stands (up to the next key moment), derived from seed + decisions.
-    const step = snapshot?.home ? playMatch(snapshot, decisions) : null;
+    // Not finished yet: the match as far as it has been revealed, derived from seed + decisions + orders.
+    const step = snapshot?.home ? playMatch(snapshot, decisions, { orders, untilMinute: m.revealed_minute }) : null;
+    const formations = await getFormations();
+    const slots = (f: string) => [...(formations[f as keyof typeof formations] ?? [])].sort((a, b) => a.slot - b.slot).map((x) => ({ x: x.x, y: x.y }));
     return {
       ...m, homeName, decisions, stats: m.stats as unknown as MatchStats, events: [],
       verification: "verified" as const,
       live: step ? (step.done ? { segment: null, needsFinish: true } : { segment: liveSegment(step), needsFinish: false }) : null,
+      matchday: Boolean(snapshot?.matchday),
+      scouting: snapshot?.away
+        ? {
+            formation: snapshot.away.formation,
+            tactic: snapshot.away.tactic,
+            players: snapshot.away.starters.map((x) => ({ name: x.player.name, position: x.slotPosition, overall: x.player.overall })),
+            homeSlots: slots(snapshot.home.formation),
+            awaySlots: slots(snapshot.away.formation),
+          }
+        : null,
     };
   }
   return {
     ...m, homeName, decisions, stats: m.stats as unknown as MatchStats, events: events.data ?? [],
-    verification: verifyReplay(m, snapshot, decisions, events.data ?? []),
+    verification: verifyReplay(m, snapshot, decisions, orders, events.data ?? []),
     live: null,
+    matchday: Boolean(snapshot?.matchday),
+    scouting: null,
   };
 }
 
@@ -130,13 +145,14 @@ function verifyReplay(
   m: { seed: number; engine_version: string; home_score: number; away_score: number },
   snapshot: MatchInput | null,
   decisions: string[],
+  orders: MatchOrder[],
   events: { event_type: string; minute: number; side: string | null; player_name: string | null }[],
 ): "verified" | "mismatch" | "other-version" {
   if (!snapshot?.home || !snapshot?.away) return "mismatch";
   if (m.engine_version !== ENGINE_VERSION) return "other-version";
   let replay;
   try {
-    replay = simulateMatch({ ...snapshot, seed: Number(m.seed) }, decisions);
+    replay = simulateMatch({ ...snapshot, seed: Number(m.seed) }, decisions, orders);
   } catch {
     return "mismatch";
   }

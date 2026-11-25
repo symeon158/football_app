@@ -303,6 +303,15 @@ replay (`data-match-live`) so the reward can't spoil the result.
   (now built from the shared `private.open_match` + `private.settle_match`). An abandoned match
   pays nothing and still counts towards the daily limit; the Match Centre offers to continue it.
   Replay verification re-simulates with the stored decisions.
+- **Matchday mode (current kick-off).** `input.matchday` adds touchline orders at any minute (tactic,
+  10-minute shouts with a cooldown, up to 5 manual substitutions), per-player fatigue (tired players
+  play up to 15% below their rating; pressing tires faster) and drops the 75' call. The server reveals
+  the match a few minutes at a time (`advanceMatch` → `playMatch(…, { orders, untilMinute })`) and
+  stores `revealed_minute` (only increases) before showing anything; `record_match_order` accepts an
+  order only AT the revealed minute and it applies from the next minute, so nobody can look ahead and
+  change the past. Chunked play is proven identical to a one-shot replay (unit-tested), and replay
+  verification includes the orders. The screen shows a pre-match scouting report, a 2D pitch (formation
+  dots shifting with possession), the touchline panel with stamina bars, and key-moment cards.
 
 ## 3. Database schema
 

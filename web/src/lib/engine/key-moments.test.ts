@@ -18,7 +18,7 @@ function playThrough(m: MatchInput, pick: (step: Extract<LiveStep, { done: false
   for (let i = 0; i < 10; i++) {
     const step = playMatch(m, decisions);
     if (step.done) return { result: step.result, decisions };
-    expect(step.moment.index).toBe(decisions.length);
+    expect(step.moment!.index).toBe(decisions.length);
     decisions.push(pick(step));
   }
   throw new Error("too many moments");
@@ -29,14 +29,14 @@ describe("key moments", () => {
     const step = playMatch(input(11), []);
     expect(step.done).toBe(false);
     if (step.done) return;
-    expect(step.moment.index).toBe(0);
-    expect(step.moment.options.length).toBeGreaterThanOrEqual(2);
+    expect(step.moment!.index).toBe(0);
+    expect(step.moment!.options.length).toBeGreaterThanOrEqual(2);
     expect(step.events[0].type).toBe("kickoff");
   });
 
   it("every match has between 2 and 6 moments and finishes", () => {
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-      const { result, decisions } = playThrough(input(seed), (s) => s.moment.options[0].id);
+      const { result, decisions } = playThrough(input(seed), (s) => s.moment!.options[0].id);
       expect(decisions.length).toBeGreaterThanOrEqual(2); // team talk + late call at least
       expect(decisions.length).toBeLessThanOrEqual(6);
       expect(result.events.at(-1)?.type).toBe("full_time");
@@ -47,7 +47,7 @@ describe("key moments", () => {
   });
 
   it("is deterministic: the same decisions always give the same match", () => {
-    const pick = (s: Extract<LiveStep, { done: false }>) => s.moment.options[s.moment.index % s.moment.options.length].id;
+    const pick = (s: Extract<LiveStep, { done: false }>) => s.moment!.options[s.moment!.index % s.moment!.options.length].id;
     const a = playThrough(input(42), pick);
     const b = playThrough(input(42), pick);
     expect(JSON.stringify(a.result)).toBe(JSON.stringify(b.result));
@@ -58,9 +58,9 @@ describe("key moments", () => {
     const m = input(7);
     const first = playMatch(m, []);
     if (first.done) throw new Error("expected a moment");
-    const optA = playMatch(m, [first.moment.options[0].id]);
-    const optB = playMatch(m, [first.moment.options[1].id]);
-    const before = (s: LiveStep) => (s.done ? s.result.events : s.events).filter((e) => e.minute < first.moment.minute);
+    const optA = playMatch(m, [first.moment!.options[0].id]);
+    const optB = playMatch(m, [first.moment!.options[1].id]);
+    const before = (s: LiveStep) => (s.done ? s.result.events : s.events).filter((e) => e.minute < first.moment!.minute);
     expect(JSON.stringify(before(optA))).toBe(JSON.stringify(before(optB)));
   });
 

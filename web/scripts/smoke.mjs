@@ -70,20 +70,27 @@ async function callAction(page, name, args) {
 async function finishLiveMatch(matchId) {
   let moments = 0;
   for (let index = 0; index < 10; index++) {
-    let advanced = false;
+    // Reveal the match up to its next key moment (or full time).
+    const shown = await callAction(`/matches/${matchId}`, "advanceMatch", [matchId, 90]);
+    if (!shown?.ok) throw new Error(`advance failed: ${JSON.stringify(shown)}`);
+    if (shown.done) return moments;
+    let decided = false;
     for (const choice of ["balanced", "shoot", "left"]) {
       const r = await callAction(`/matches/${matchId}`, "decideMoment", [matchId, index, choice]);
       if (r?.ok) {
         moments++;
-        advanced = true;
+        decided = true;
         if (r.done) return moments;
         break;
       }
     }
-    if (!advanced) throw new Error(`no valid choice at moment ${index}`);
+    if (!decided) throw new Error(`no valid choice at moment ${index}`);
   }
   throw new Error("match never finished");
 }
+
+/** A touchline order through the real server action. */
+const giveOrderAction = (matchId, order) => callAction(`/matches/${matchId}`, "giveOrder", [matchId, order]);
 
 async function submitForm(path, fields) {
   const html = await (await get(path)).text();
@@ -300,8 +307,16 @@ const matchId = matchUrl.match(/\/matches\/([0-9a-f-]{36})/)?.[1];
 check("kick-off starts a match and redirects to it", [303, 307].includes(kick.status) && Boolean(matchId), `${kick.status} ${matchUrl}`);
 const { data: started } = await sb.from("matches").select("status, reward_coins").eq("id", matchId).single();
 check("a match in progress has paid nothing yet", started?.status === "in_progress" && started.reward_coins === 0, JSON.stringify(started));
+const quick = await submitForm("/matches", { teamId: activeTeam.id, tactic: "balanced", difficulty: "normal" });
+check("cooldown blocks an instant second kick-off", quick.status === 200 && (await quick.text()).includes("Catch your breath"));
 const liveRaw = await (await get(`/matches/${matchId}`)).text();
-check("the live match page renders with its first key moment", visibleText(liveRaw).includes("Live commentary") && /\\?"kind\\?":\\?"(chance|team_talk|late_call|penalty)/.test(liveRaw));
+check("the live match page opens on the pre-match screen with the touchline", visibleText(liveRaw).includes("Live commentary") && visibleText(liveRaw).includes("Touchline") && visibleText(liveRaw).includes("Pre-match"));
+const tacticOrder = await giveOrderAction(matchId, { kind: "tactic", value: "defensive" });
+const badSub = await giveOrderAction(matchId, { kind: "sub", off: "00000000-0000-0000-0000-000000000000", on: "00000000-0000-0000-0000-000000000001" });
+const { data: ordered } = await sb.from("matches").select("orders, revealed_minute").eq("id", matchId).single();
+check("a touchline order is stored at the minute being shown", tacticOrder?.ok === true && ordered?.orders?.length === 1 && ordered.orders[0].minute === ordered.revealed_minute,
+  JSON.stringify({ tacticOrder, ordered }));
+check("an impossible substitution is refused", badSub?.ok === false && ordered?.orders?.length === 1, JSON.stringify(badSub));
 const moments = await finishLiveMatch(matchId);
 check("key moments are decided through the server until full time", moments >= 2 && moments <= 6, String(moments));
 const { data: decided } = await sb.from("matches").select("decisions").eq("id", matchId).single();
@@ -317,8 +332,6 @@ check("match page shows a verified, reproducible replay", matchHtml.includes("Ve
 const again = await submitForm("/matches", { teamId: activeTeam.id, tactic: "attacking", difficulty: "easy", key: keyMatch[1] });
 check("resubmitting the same form returns the same match", (again.headers.get("location") ?? "").includes(matchId), again.headers.get("location"));
 check("resubmission is not paid twice", (await sb.from("wallets").select("balance").single()).data.balance === balAfterMatch);
-const quick = await submitForm("/matches", { teamId: activeTeam.id, tactic: "balanced", difficulty: "normal" });
-check("cooldown blocks an instant second kick-off", quick.status === 200 && (await quick.text()).includes("Catch your breath"));
 const { error: cheatErr } = await sb.rpc("record_match", { p_user_id: uid, p_team_id: activeTeam.id, p_idempotency_key: "cheat-0000001", p_payload: { home_score: 9, away_score: 0 } });
 check("players cannot call record_match", Boolean(cheatErr), "call succeeded!");
 const histAfter = await (await get("/marketplace/history")).text();

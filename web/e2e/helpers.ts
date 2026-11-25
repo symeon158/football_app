@@ -44,7 +44,7 @@ export async function playMatch(page: Page, opts: { tactic?: string; difficulty?
 const momentLabel = async (page: Page) => {
   const dialog = page.getByRole("dialog");
   if (!(await dialog.count())) return "";
-  return `${await dialog.getByText(/^Key moment/).textContent()}|${await dialog.getByRole("heading").textContent()}`;
+  return (await dialog.innerText()).slice(0, 120); // pre-match screen or "Key moment · 63' …"
 };
 
 /** Plays an interactive match through every key moment (first option each time) until full time. */
@@ -53,7 +53,10 @@ export async function playKeyMoments(page: Page) {
   const skip = page.getByRole("button", { name: /Skip to result|Watch replay/ }); // full time reached
   const next = page.getByRole("button", { name: "Next moment" });
   for (let i = 0; i < 20; i++) {
-    await expect(dialog.or(skip).or(next).first()).toBeVisible({ timeout: 60_000 });
+    // Matchday games: play at 3× speed once the match is under way.
+    const faster = page.getByRole("button", { name: "Speed 1×, change speed" });
+    if (await faster.isVisible()) await faster.click().catch(() => {});
+    await expect(dialog.or(skip).or(next).first()).toBeVisible({ timeout: 90_000 });
     if (await skip.isVisible()) return;
     if (await dialog.isVisible()) {
       const label = await momentLabel(page);

@@ -1,6 +1,6 @@
-import type { KeyMoment, LiveStep } from "./types";
+import type { HomeState, KeyMoment, LiveStep, Side } from "./types";
 
-/** What the live match screen needs up to the next key moment (plain, serialisable data). */
+/** What the live match screen needs up to the revealed minute (plain, serialisable data). */
 export type LiveEvent = {
   minute: number;
   type: string;
@@ -13,7 +13,11 @@ export type LiveEvent = {
 export type LiveSegment = {
   events: LiveEvent[];
   score: { home: number; away: number };
-  moment: KeyMoment;
+  /** The decision being waited for, or null when the match is simply paused at `minute`. */
+  moment: KeyMoment | null;
+  minute: number;
+  home: HomeState;
+  possession: { minute: number; side: Side }[];
 };
 
 export function liveSegment(step: Extract<LiveStep, { done: false }>): LiveSegment {
@@ -21,5 +25,8 @@ export function liveSegment(step: Extract<LiveStep, { done: false }>): LiveSegme
     events: step.events.map((e) => ({ minute: e.minute, type: e.type, side: e.side, player: e.playerName, assist: e.assistName, detail: e.detail })),
     score: step.score,
     moment: step.moment,
+    minute: step.minute,
+    home: step.home,
+    possession: step.possession,
   };
 }

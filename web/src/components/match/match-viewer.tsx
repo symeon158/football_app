@@ -34,13 +34,15 @@ type Props = {
   challengeOpponent?: string | null;
   levelUp: number | null;
   live: boolean;
+  /** Live replay starts at this minute (continuing an interactive match after its last decision). */
+  startMinute?: number;
 };
 
 const HOME = SERIES_COLORS[0];
 const AWAY = SERIES_COLORS[1];
 const SPEEDS = [{ label: "1×", ms: 230 }, { label: "4×", ms: 60 }] as const;
 
-function EventIcon({ type }: { type: string }) {
+export function EventIcon({ type }: { type: string }) {
   if (type === "goal") return <span aria-hidden className="flex size-6 items-center justify-center rounded-full bg-primary text-[13px]">⚽</span>;
   if (type === "yellow_card") return <span aria-hidden className="h-5 w-3.5 rounded-[3px] bg-yellow-400" />;
   if (type === "red_card") return <span aria-hidden className="h-5 w-3.5 rounded-[3px] bg-red-500" />;
@@ -50,7 +52,7 @@ function EventIcon({ type }: { type: string }) {
   return <span aria-hidden className="size-2 rounded-full bg-muted-foreground" />;
 }
 
-function describe(e: ViewerEvent) {
+export function describe(e: Pick<ViewerEvent, "type" | "player" | "assist" | "detail">) {
   switch (e.type) {
     case "kickoff": return "Kick-off";
     case "half_time": return `Half time · ${e.detail}`;
@@ -65,10 +67,16 @@ function describe(e: ViewerEvent) {
   }
 }
 
-export function MatchViewer({ homeName, awayName, events, stats, ratings, manOfTheMatch, rewards, levelUp, live, defendingAgainst, challengeOpponent }: Props) {
+export function MatchViewer({ homeName, awayName, events, stats, ratings, manOfTheMatch, rewards, levelUp, live, defendingAgainst, challengeOpponent, startMinute = 0 }: Props) {
   const lastIndex = events.length - 1;
   // Playback = match clock + number of events revealed, advanced together by one pure update.
-  const [{ clock, shown }, setPlayback] = useState(live ? { clock: 0, shown: 1 } : { clock: 90, shown: events.length });
+  const [{ clock, shown }, setPlayback] = useState(() => {
+    if (!live) return { clock: 90, shown: events.length };
+    const from = Math.max(0, Math.min(89, startMinute));
+    let n = 1;
+    while (n < events.length && events[n].minute <= from && events[n].type !== "full_time") n++;
+    return { clock: from, shown: n };
+  });
   const [playing, setPlaying] = useState(live);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(SPEEDS[0]);
   const finished = shown > lastIndex;

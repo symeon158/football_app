@@ -44,6 +44,47 @@ const get = async (path, opts = {}) => {
 const decode = (s) =>
   s.replaceAll("&quot;", '"').replaceAll("&#x27;", "'").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
 
+/** Calls a server action the way the browser does (id found in the page's client chunks). */
+async function callAction(page, name, args) {
+  const html = await (await get(page)).text();
+  const chunks = [...html.matchAll(/src="(\/_next\/static\/chunks\/[^"]+\.js)"/g)].map((m) => m[1]);
+  let actionId = null;
+  for (const c of chunks) {
+    const js = await (await fetch(BASE + c)).text();
+    const m = js.match(new RegExp(`createServerReference\\)\\("([0-9a-f]{40,})"[^)]*?"${name}"`)) ?? js.match(new RegExp(`\\("([0-9a-f]{40,})",[^)]*?"${name}"\\)`));
+    if (m) { actionId = m[1]; break; }
+  }
+  if (!actionId) throw new Error(`action ${name} not found on ${page}`);
+  const res = await fetch(BASE + page, {
+    method: "POST",
+    redirect: "manual",
+    headers: { cookie: cookieHeader(), "next-action": actionId, accept: "text/x-component", "content-type": "text/plain;charset=UTF-8", origin: BASE },
+    body: JSON.stringify(args),
+  });
+  const text = await res.text();
+  const row = text.split("\n").map((l) => l.slice(l.indexOf(":") + 1)).reverse().find((v) => v.startsWith("{") && v.includes('"ok"'));
+  return row ? JSON.parse(row) : null;
+}
+
+/** Plays an interactive match to full time, picking an always-valid option at each key moment. */
+async function finishLiveMatch(matchId) {
+  let moments = 0;
+  for (let index = 0; index < 10; index++) {
+    let advanced = false;
+    for (const choice of ["balanced", "shoot", "left"]) {
+      const r = await callAction(`/matches/${matchId}`, "decideMoment", [matchId, index, choice]);
+      if (r?.ok) {
+        moments++;
+        advanced = true;
+        if (r.done) return moments;
+        break;
+      }
+    }
+    if (!advanced) throw new Error(`no valid choice at moment ${index}`);
+  }
+  throw new Error("match never finished");
+}
+
 async function submitForm(path, fields) {
   const html = await (await get(path)).text();
   const form = new FormData();
@@ -256,7 +297,15 @@ const balBeforeMatch = (await sb.from("wallets").select("balance").single()).dat
 const kick = await submitForm("/matches", { teamId: activeTeam.id, tactic: "attacking", difficulty: "easy", key: keyMatch[1] });
 const matchUrl = kick.headers.get("location") ?? "";
 const matchId = matchUrl.match(/\/matches\/([0-9a-f-]{36})/)?.[1];
-check("kick-off plays a match and redirects to it", [303, 307].includes(kick.status) && Boolean(matchId), `${kick.status} ${matchUrl}`);
+check("kick-off starts a match and redirects to it", [303, 307].includes(kick.status) && Boolean(matchId), `${kick.status} ${matchUrl}`);
+const { data: started } = await sb.from("matches").select("status, reward_coins").eq("id", matchId).single();
+check("a match in progress has paid nothing yet", started?.status === "in_progress" && started.reward_coins === 0, JSON.stringify(started));
+const liveRaw = await (await get(`/matches/${matchId}`)).text();
+check("the live match page renders with its first key moment", visibleText(liveRaw).includes("Live commentary") && /\\?"kind\\?":\\?"(chance|team_talk|late_call|penalty)/.test(liveRaw));
+const moments = await finishLiveMatch(matchId);
+check("key moments are decided through the server until full time", moments >= 2 && moments <= 6, String(moments));
+const { data: decided } = await sb.from("matches").select("decisions").eq("id", matchId).single();
+check("every decision is stored with the match", decided?.decisions?.length === moments, JSON.stringify(decided));
 const { data: played } = await sb.from("matches").select("home_score, away_score, reward_coins, xp_gained, difficulty, tactic, seed, engine_version").eq("id", matchId).single();
 const { count: evCount } = await sb.from("match_events").select("seq", { count: "exact", head: true }).eq("match_id", matchId);
 check("match stored with events, server rewards and settings", played?.difficulty === "easy" && played?.tactic === "attacking" && played.reward_coins > 0 && evCount >= 3,
@@ -285,6 +334,7 @@ const centre2 = await (await get("/matches")).text();
 const key2 = centre2.match(/name="key" value="([^"]+)"/)?.[1];
 const kick2 = await submitForm("/matches", { teamId: activeTeam.id, tactic: "balanced", difficulty: "easy", key: key2 });
 check("second match played after the cooldown", [303, 307].includes(kick2.status), String(kick2.status));
+await finishLiveMatch((kick2.headers.get("location") ?? "").match(/\/matches\/([0-9a-f-]{36})/)?.[1]);
 const { data: chs } = await sb.rpc("get_challenges");
 const warmup = chs.find((c) => c.code === "daily_play_2");
 check("Warm-up completed by two matches", warmup?.completed === true && warmup?.progress === 2, JSON.stringify(warmup));

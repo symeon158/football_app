@@ -37,7 +37,26 @@ export type MatchInput = {
   home: TeamSheet;
   away: TeamSheet;
   homeBonusPct: number; // stadium home advantage, 0–15
+  /** Interactive match: pauses at key moments for the home manager's decisions. Absent on older matches. */
+  keyMoments?: boolean;
 };
+
+export type KeyMomentKind = "chance" | "penalty" | "team_talk" | "late_call";
+
+/** A decision point offered to the home manager. */
+export type KeyMoment = {
+  index: number; // 0-based order within the match
+  kind: KeyMomentKind;
+  minute: number;
+  title: string;
+  context: string;
+  options: { id: string; label: string; hint: string }[];
+};
+
+/** Result of advancing an interactive match with the decisions made so far. */
+export type LiveStep =
+  | { done: true; result: MatchResult }
+  | { done: false; events: MatchEvent[]; score: { home: number; away: number }; moment: KeyMoment };
 
 export type EventType = "kickoff" | "goal" | "chance" | "save" | "yellow_card" | "red_card" | "substitution" | "half_time" | "full_time";
 

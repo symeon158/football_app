@@ -23,7 +23,8 @@ CI (`.github/workflows/ci.yml`) runs every test suite below on each push and pul
 | 8 | Challenges, achievements, leaderboards | ✅ done |
 | 9 | Testing, security review, deployment | ✅ done (deploy steps in docs/DEPLOYMENT.md) |
 | — | Password reset, manager challenges (friend matches) | ✅ done |
-| — | Weekly league, player training, card trading, notifications | planned |
+| — | Interactive matches with key moments | ✅ done |
+| — | Weekly league, daily streak, player training, cup, squad missions, trading | planned |
 
 ## Prerequisites
 

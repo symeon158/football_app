@@ -2,7 +2,20 @@ import { LINE_OF } from "@/lib/game/lineup";
 import { effectiveRating, type Position } from "@/lib/game/team-rating";
 
 import { Rng } from "./rng";
-import { ENGINE_VERSION, type EnginePlayer, type MatchEvent, type MatchInput, type MatchResult, type PlayerRating, type Side, type TeamSheet, type TeamStats } from "./types";
+import {
+  ENGINE_VERSION,
+  type EnginePlayer,
+  type KeyMoment,
+  type LiveStep,
+  type MatchEvent,
+  type MatchInput,
+  type MatchResult,
+  type PlayerRating,
+  type Side,
+  type Tactic,
+  type TeamSheet,
+  type TeamStats,
+} from "./types";
 
 /**
  * Deterministic, minute-by-minute football simulation.
@@ -13,6 +26,11 @@ import { ENGINE_VERSION, type EnginePlayer, type MatchEvent, type MatchInput, ty
  * always: every random number comes from one seeded Rng, consumed in a fixed
  * order. Changing the order or the constants changes results — bump
  * ENGINE_VERSION when you do, so stored matches stay explainable.
+ *
+ * Interactive matches (input.keyMoments) additionally pause at key moments for
+ * the home manager's decisions. Decision outcomes use a second seeded stream,
+ * so the main stream is consumed identically whatever is chosen, and a match
+ * is fully determined by its seed plus the list of decisions.
  */
 
 // Tuned so equal teams average ~2.7 goals per match (see engine.test.ts).
@@ -99,7 +117,30 @@ function initLive(side: Side, sheet: TeamSheet, rng: Rng): Live {
 const LINE_SHOT_WEIGHT = { GK: 0, DEF: 0.35, MID: 1.4, ATT: 3 } as const;
 const LINE_CARD_WEIGHT = { GK: 0.2, DEF: 2, MID: 1.5, ATT: 0.9 } as const;
 
-export function simulateMatch(input: MatchInput): MatchResult {
+/** Thrown inside the loop when the next key moment has no decision yet. */
+class PendingMoment {
+  constructor(readonly moment: KeyMoment) {}
+}
+
+const TEAM_TALK: KeyMoment["options"] = [
+  { id: "balanced", label: "Keep it balanced", hint: "No change in approach" },
+  { id: "attacking", label: "Go out and attack", hint: "More chances for both sides" },
+  { id: "defensive", label: "Stay compact", hint: "Tighter at the back, fewer chances" },
+];
+
+/** A whole match. For interactive matches every decision must be supplied. */
+export function simulateMatch(input: MatchInput, decisions: readonly string[] = []): MatchResult {
+  const step = playMatch(input, decisions);
+  if (!step.done) throw new Error("PENDING_DECISION");
+  return step.result;
+}
+
+/**
+ * Advances a match with the decisions made so far. Without `input.keyMoments` this is the classic
+ * simulation and never pauses. With it, the home manager decides at up to six key moments: the
+ * half-time team talk, a late call at 75', up to three big chances and possibly a penalty.
+ */
+export function playMatch(input: MatchInput, decisions: readonly string[] = []): LiveStep {
   const rng = new Rng(input.seed);
   const home = initLive("home", input.home, rng);
   const away = initLive("away", input.away, rng);
@@ -113,6 +154,92 @@ export function simulateMatch(input: MatchInput): MatchResult {
   const push = (e: Omit<MatchEvent, "playerId" | "playerName" | "assistId" | "assistName" | "detail"> & Partial<MatchEvent>) =>
     events.push({ playerId: null, playerName: null, assistId: null, assistName: null, detail: null, ...e });
 
+  /* ------------------------------------------------------------ key moments */
+  const interactive = Boolean(input.keyMoments);
+  const mrng = new Rng((input.seed ^ 0x2545f491) >>> 0); // decision outcomes only
+  const penaltyMinute = interactive && mrng.chance(0.4) ? mrng.int(50, 86) : null;
+  let momentIndex = 0, chanceMoments = 0, penaltyTaken = false, lateCallDone = false, lastChanceMoment = -99;
+  // Chance moments are spread over the match: not before these minutes, and 15+ minutes apart.
+  const CHANCE_MOMENT_FROM = [8, 25, 50];
+
+  const ask = (m: Omit<KeyMoment, "index">): string => {
+    const index = momentIndex++;
+    if (index >= decisions.length) throw new PendingMoment({ ...m, index });
+    const choice = decisions[index];
+    if (!m.options.some((o) => o.id === choice)) throw new Error("INVALID_DECISION");
+    return choice;
+  };
+  const setTactic = (t: Live, tactic: Tactic) => {
+    t.sheet = { ...t.sheet, tactic };
+  };
+
+  /** A home shot created at a key moment, resolved with the decision stream. */
+  const homeShot = (minute: number, sh: OnPitch, q: number, assister: OnPitch | undefined) => {
+    const sH = strengths(home, input.homeBonusPct), sA = strengths(away, input.homeBonusPct);
+    if (!mrng.chance(TUNING.onTargetBase + q * TUNING.onTargetQuality)) {
+      push({ minute, type: "chance", side: "home", playerId: sh.player.id, playerName: sh.player.name, detail: "Shot off target" });
+      return;
+    }
+    home.stats.shotsOnTarget++;
+    const finishing = 0.5 * sh.player.shooting + 0.5 * sH.attack;
+    const pGoal = Math.max(0.02, Math.min(0.9, q * TUNING.goalFactor * Math.pow(finishing / Math.max(1, sA.gk), TUNING.goalExponent)));
+    if (mrng.chance(pGoal)) {
+      score.home++;
+      goals.set(sh.player, (goals.get(sh.player) ?? 0) + 1);
+      if (assister) assists.set(assister.player, (assists.get(assister.player) ?? 0) + 1);
+      push({
+        minute, type: "goal", side: "home",
+        playerId: sh.player.id, playerName: sh.player.name,
+        assistId: assister?.player.id ?? null, assistName: assister?.player.name ?? null,
+        detail: `${score.home}–${score.away}`,
+      });
+    } else {
+      away.stats.saves++;
+      const keeper = active(away).find((p) => p.slotPosition === "GK");
+      push({ minute, type: "save", side: "away", playerId: keeper?.player.id ?? null, playerName: keeper?.player.name ?? null, detail: `Denies ${sh.player.name}` });
+    }
+  };
+
+  const resolveChance = (minute: number, choice: string, shooter: OnPitch, mate: OnPitch | undefined, q: number) => {
+    if (choice === "pass" && mate) {
+      if (mrng.chance(Math.max(0.05, 0.42 - shooter.player.passing / 250))) {
+        push({ minute, type: "chance", side: "home", playerId: shooter.player.id, playerName: shooter.player.name, detail: "Pass intercepted" });
+      } else {
+        homeShot(minute, mate, Math.min(0.75, q + 0.15), shooter);
+      }
+    } else if (choice === "dribble") {
+      if (mrng.chance(Math.max(0.25, Math.min(0.85, 0.2 + shooter.player.dribbling / 160)))) {
+        homeShot(minute, shooter, Math.min(0.8, q + 0.25), undefined);
+      } else {
+        push({ minute, type: "chance", side: "home", playerId: shooter.player.id, playerName: shooter.player.name, detail: "Tackled" });
+      }
+    } else {
+      homeShot(minute, shooter, q, undefined);
+    }
+  };
+
+  const resolvePenalty = (minute: number, corner: string, taker: OnPitch) => {
+    home.stats.shots++;
+    home.stats.xg += 0.76;
+    const dive = mrng.weighted(["left", "centre", "right"], (d) => (d === "centre" ? 0.16 : 0.42));
+    const keeper = active(away).find((p) => p.slotPosition === "GK");
+    const gk = keeper ? eff(keeper) : 30;
+    if (dive === corner && mrng.chance(Math.max(0.4, Math.min(0.85, 0.7 + (gk - 60) / 200)))) {
+      home.stats.shotsOnTarget++;
+      away.stats.saves++;
+      push({ minute, type: "save", side: "away", playerId: keeper?.player.id ?? null, playerName: keeper?.player.name ?? null, detail: `Saves ${taker.player.name}'s penalty` });
+      return;
+    }
+    if (dive !== corner && mrng.chance(Math.max(0.03, (100 - taker.player.shooting) / 300))) {
+      push({ minute, type: "chance", side: "home", playerId: taker.player.id, playerName: taker.player.name, detail: "Penalty missed" });
+      return;
+    }
+    home.stats.shotsOnTarget++;
+    score.home++;
+    goals.set(taker.player, (goals.get(taker.player) ?? 0) + 1);
+    push({ minute, type: "goal", side: "home", playerId: taker.player.id, playerName: taker.player.name, detail: `${score.home}–${score.away} (pen)` });
+  };
+
   push({ minute: 0, type: "kickoff", side: null, detail: `${input.home.name} vs ${input.away.name}` });
 
   const firstHalfStoppage = rng.int(0, 2);
@@ -123,108 +250,185 @@ export function simulateMatch(input: MatchInput): MatchResult {
     ...Array.from({ length: 45 + secondHalfStoppage }, (_, i) => Math.min(46 + i, 90)),
   ];
 
-  for (const minute of minutes) {
-    if (minute === -1) {
-      push({ minute: 45, type: "half_time", side: null, detail: `${score.home}–${score.away}` });
-      continue;
-    }
-
-    // Substitutions (both sides, in fixed order for determinism)
-    for (const t of [home, away]) {
-      while (t.subMinutes.length && t.subMinutes[0] === minute) {
-        t.subMinutes.shift();
-        const candidates = active(t).filter((p) => p.slotPosition !== "GK");
-        if (!candidates.length || !t.bench.length) continue;
-        // Tired/booked players come off first; deterministic tie-break by name.
-        const off = [...candidates].sort((a, b) => eff(a) - (a.yellow ? 6 : 0) - (eff(b) - (b.yellow ? 6 : 0)) || a.player.name.localeCompare(b.player.name))[0];
-        const best = [...t.bench].sort(
-          (a, b) =>
-            effectiveRating({ slotPosition: off.slotPosition, cardPosition: b.position, overall: b.overall }) -
-              effectiveRating({ slotPosition: off.slotPosition, cardPosition: a.position, overall: a.overall }) || a.name.localeCompare(b.name),
-        )[0];
-        t.bench.splice(t.bench.indexOf(best), 1);
-        off.sentOff = false;
-        off.minuteOff = minute;
-        const replacement: OnPitch = { slotPosition: off.slotPosition, player: best, yellow: false, sentOff: false, minuteOn: minute, minuteOff: null };
-        t.pitch[t.pitch.indexOf(off)] = replacement;
-        t.played.set(best, replacement);
-        push({ minute, type: "substitution", side: t.side, playerId: best.id, playerName: best.name, assistId: off.player.id, assistName: off.player.name, detail: `${best.name} replaces ${off.player.name}` });
-      }
-    }
-
-    const sH = strengths(home, input.homeBonusPct);
-    const sA = strengths(away, input.homeBonusPct);
-    const pHome = 1 / (1 + Math.exp(-(sH.midfield - sA.midfield) / TUNING.possessionScale));
-    const attSide: Side = rng.chance(pHome) ? "home" : "away";
-    const atk = teams[attSide], def = teams[other(attSide)];
-    const sAtk = attSide === "home" ? sH : sA, sDef = attSide === "home" ? sA : sH;
-    atk.possessionMinutes++;
-
-    // Chance creation
-    const pChance = TUNING.chancePerMinute * sAtk.chanceMultiplier * Math.pow(sAtk.attack / Math.max(1, sDef.defence), TUNING.chanceExponent);
-    if (rng.chance(Math.min(0.45, pChance))) {
-      const shooter = rng.weighted(active(atk), (p) => LINE_SHOT_WEIGHT[LINE_OF[p.slotPosition]] * p.player.shooting);
-      const quality = 0.03 + Math.pow(rng.next(), 1.6) * 0.5; // xG of the chance
-      atk.stats.shots++;
-      atk.stats.xg += quality;
-      if (shooter && rng.chance(TUNING.onTargetBase + quality * TUNING.onTargetQuality)) {
-        atk.stats.shotsOnTarget++;
-        const finishing = 0.5 * shooter.player.shooting + 0.5 * sAtk.attack;
-        const pGoal = Math.max(0.02, Math.min(0.88, quality * TUNING.goalFactor * Math.pow(finishing / Math.max(1, sDef.gk), TUNING.goalExponent)));
-        if (rng.chance(pGoal)) {
-          score[attSide]++;
-          goals.set(shooter.player, (goals.get(shooter.player) ?? 0) + 1);
-          const assister = rng.chance(0.82)
-            ? rng.weighted(active(atk).filter((p) => p !== shooter), (p) => (LINE_OF[p.slotPosition] === "GK" ? 0.05 : 1) * p.player.passing)
-            : undefined;
-          if (assister) assists.set(assister.player, (assists.get(assister.player) ?? 0) + 1);
-          push({
-            minute, type: "goal", side: attSide,
-            playerId: shooter.player.id, playerName: shooter.player.name,
-            assistId: assister?.player.id ?? null, assistName: assister?.player.name ?? null,
-            detail: `${score.home}–${score.away}`,
+  try {
+    for (const minute of minutes) {
+      if (minute === -1) {
+        push({ minute: 45, type: "half_time", side: null, detail: `${score.home}–${score.away}` });
+        if (interactive) {
+          const talk = ask({
+            kind: "team_talk", minute: 45, title: "Half-time team talk",
+            context: `${input.home.name} ${score.home}–${score.away} ${input.away.name}. How should your team play the second half?`,
+            options: TEAM_TALK,
           });
-        } else {
-          def.stats.saves++;
-          const keeper = active(def).find((p) => p.slotPosition === "GK");
-          if (quality > 0.18) {
-            push({ minute, type: "save", side: def.side, playerId: keeper?.player.id ?? null, playerName: keeper?.player.name ?? null, detail: `Denies ${shooter.player.name}` });
+          setTactic(home, talk as Tactic);
+        }
+        continue;
+      }
+
+      if (interactive && minute === 75 && !lateCallDone) {
+        lateCallDone = true;
+        const diff = score.home - score.away;
+        const call = ask({
+          kind: "late_call", minute: 75,
+          title: diff > 0 ? "Protect the lead?" : diff === 0 ? "Go for the winner?" : "Chasing the game",
+          context: `75' — ${score.home}–${score.away}. Fifteen minutes to go.`,
+          options:
+            diff > 0
+              ? [
+                  { id: "defensive", label: "Protect the lead", hint: "Tighter defence, fewer chances" },
+                  { id: "balanced", label: "Stay the course", hint: "No change in approach" },
+                  { id: "attacking", label: "Go for the next goal", hint: "More chances both ways" },
+                ]
+              : [
+                  { id: "attacking", label: "All-out attack", hint: "More chances both ways" },
+                  { id: "balanced", label: "Stay patient", hint: "No change in approach" },
+                  { id: "defensive", label: "Stay solid", hint: "Don't concede another" },
+                ],
+        });
+        setTactic(home, call as Tactic);
+      }
+
+      // Substitutions (both sides, in fixed order for determinism)
+      for (const t of [home, away]) {
+        while (t.subMinutes.length && t.subMinutes[0] === minute) {
+          t.subMinutes.shift();
+          const candidates = active(t).filter((p) => p.slotPosition !== "GK");
+          if (!candidates.length || !t.bench.length) continue;
+          // Tired/booked players come off first; deterministic tie-break by name.
+          const off = [...candidates].sort((a, b) => eff(a) - (a.yellow ? 6 : 0) - (eff(b) - (b.yellow ? 6 : 0)) || a.player.name.localeCompare(b.player.name))[0];
+          const best = [...t.bench].sort(
+            (a, b) =>
+              effectiveRating({ slotPosition: off.slotPosition, cardPosition: b.position, overall: b.overall }) -
+                effectiveRating({ slotPosition: off.slotPosition, cardPosition: a.position, overall: a.overall }) || a.name.localeCompare(b.name),
+          )[0];
+          t.bench.splice(t.bench.indexOf(best), 1);
+          off.sentOff = false;
+          off.minuteOff = minute;
+          const replacement: OnPitch = { slotPosition: off.slotPosition, player: best, yellow: false, sentOff: false, minuteOn: minute, minuteOff: null };
+          t.pitch[t.pitch.indexOf(off)] = replacement;
+          t.played.set(best, replacement);
+          push({ minute, type: "substitution", side: t.side, playerId: best.id, playerName: best.name, assistId: off.player.id, assistName: off.player.name, detail: `${best.name} replaces ${off.player.name}` });
+        }
+      }
+
+      const sH = strengths(home, input.homeBonusPct);
+      const sA = strengths(away, input.homeBonusPct);
+      const pHome = 1 / (1 + Math.exp(-(sH.midfield - sA.midfield) / TUNING.possessionScale));
+      const attSide: Side = rng.chance(pHome) ? "home" : "away";
+      const atk = teams[attSide], def = teams[other(attSide)];
+      const sAtk = attSide === "home" ? sH : sA, sDef = attSide === "home" ? sA : sH;
+      atk.possessionMinutes++;
+
+      // Chance creation
+      const pChance = TUNING.chancePerMinute * sAtk.chanceMultiplier * Math.pow(sAtk.attack / Math.max(1, sDef.defence), TUNING.chanceExponent);
+      if (rng.chance(Math.min(0.45, pChance))) {
+        const shooter = rng.weighted(active(atk), (p) => LINE_SHOT_WEIGHT[LINE_OF[p.slotPosition]] * p.player.shooting);
+        const quality = 0.03 + Math.pow(rng.next(), 1.6) * 0.5; // xG of the chance
+        atk.stats.shots++;
+        atk.stats.xg += quality;
+        if (
+          interactive && attSide === "home" && shooter && quality >= 0.12 && chanceMoments < 3 &&
+          minute >= CHANCE_MOMENT_FROM[chanceMoments] && minute - lastChanceMoment >= 15
+        ) {
+          // Key moment: the manager decides how to finish the move.
+          chanceMoments++;
+          lastChanceMoment = minute;
+          const mate = [...active(atk)]
+            .filter((p) => p !== shooter && LINE_OF[p.slotPosition] !== "GK")
+            .sort((a, b) => b.player.shooting - a.player.shooting || a.player.name.localeCompare(b.player.name))[0];
+          const choice = ask({
+            kind: "chance", minute,
+            title: quality > 0.3 ? "Huge chance!" : "Chance on the edge of the box",
+            context: `${shooter.player.name} (${shooter.slotPosition}) has the ball with a defender closing in.`,
+            options: [
+              { id: "shoot", label: `Shoot — ${shooter.player.name}`, hint: `Shooting ${shooter.player.shooting}` },
+              ...(mate ? [{ id: "pass", label: `Square it to ${mate.player.name}`, hint: `Passing ${shooter.player.passing} → shooting ${mate.player.shooting}` }] : []),
+              { id: "dribble", label: "Take on the defender", hint: `Dribbling ${shooter.player.dribbling}` },
+            ],
+          });
+          resolveChance(minute, choice, shooter, mate, quality);
+        } else if (shooter && rng.chance(TUNING.onTargetBase + quality * TUNING.onTargetQuality)) {
+          atk.stats.shotsOnTarget++;
+          const finishing = 0.5 * shooter.player.shooting + 0.5 * sAtk.attack;
+          const pGoal = Math.max(0.02, Math.min(0.88, quality * TUNING.goalFactor * Math.pow(finishing / Math.max(1, sDef.gk), TUNING.goalExponent)));
+          if (rng.chance(pGoal)) {
+            score[attSide]++;
+            goals.set(shooter.player, (goals.get(shooter.player) ?? 0) + 1);
+            const assister = rng.chance(0.82)
+              ? rng.weighted(active(atk).filter((p) => p !== shooter), (p) => (LINE_OF[p.slotPosition] === "GK" ? 0.05 : 1) * p.player.passing)
+              : undefined;
+            if (assister) assists.set(assister.player, (assists.get(assister.player) ?? 0) + 1);
+            push({
+              minute, type: "goal", side: attSide,
+              playerId: shooter.player.id, playerName: shooter.player.name,
+              assistId: assister?.player.id ?? null, assistName: assister?.player.name ?? null,
+              detail: `${score.home}–${score.away}`,
+            });
+          } else {
+            def.stats.saves++;
+            const keeper = active(def).find((p) => p.slotPosition === "GK");
+            if (quality > 0.18) {
+              push({ minute, type: "save", side: def.side, playerId: keeper?.player.id ?? null, playerName: keeper?.player.name ?? null, detail: `Denies ${shooter.player.name}` });
+            }
+          }
+        } else if (shooter && quality > 0.3) {
+          push({ minute, type: "chance", side: attSide, playerId: shooter.player.id, playerName: shooter.player.name, detail: "Big chance missed" });
+        }
+      }
+
+      // Discipline
+      for (const t of [home, away]) {
+        if (rng.chance(TUNING.yellowPerMinute)) {
+          const who = rng.weighted(active(t), (p) => LINE_CARD_WEIGHT[LINE_OF[p.slotPosition]] * (0.5 + p.player.physicality / 100));
+          if (who) {
+            t.stats.yellowCards++;
+            if (who.yellow) {
+              who.sentOff = true;
+              who.minuteOff = minute;
+              t.reds++;
+              t.stats.redCards++;
+              push({ minute, type: "red_card", side: t.side, playerId: who.player.id, playerName: who.player.name, detail: "Second yellow" });
+            } else {
+              who.yellow = true;
+              push({ minute, type: "yellow_card", side: t.side, playerId: who.player.id, playerName: who.player.name });
+            }
           }
         }
-      } else if (shooter && quality > 0.3) {
-        push({ minute, type: "chance", side: attSide, playerId: shooter.player.id, playerName: shooter.player.name, detail: "Big chance missed" });
-      }
-    }
-
-    // Discipline
-    for (const t of [home, away]) {
-      if (rng.chance(TUNING.yellowPerMinute)) {
-        const who = rng.weighted(active(t), (p) => LINE_CARD_WEIGHT[LINE_OF[p.slotPosition]] * (0.5 + p.player.physicality / 100));
-        if (who) {
-          t.stats.yellowCards++;
-          if (who.yellow) {
+        if (rng.chance(TUNING.straightRedPerMinute)) {
+          const who = rng.weighted(active(t), (p) => LINE_CARD_WEIGHT[LINE_OF[p.slotPosition]]);
+          if (who) {
             who.sentOff = true;
             who.minuteOff = minute;
             t.reds++;
             t.stats.redCards++;
-            push({ minute, type: "red_card", side: t.side, playerId: who.player.id, playerName: who.player.name, detail: "Second yellow" });
-          } else {
-            who.yellow = true;
-            push({ minute, type: "yellow_card", side: t.side, playerId: who.player.id, playerName: who.player.name });
+            push({ minute, type: "red_card", side: t.side, playerId: who.player.id, playerName: who.player.name, detail: "Straight red" });
           }
         }
       }
-      if (rng.chance(TUNING.straightRedPerMinute)) {
-        const who = rng.weighted(active(t), (p) => LINE_CARD_WEIGHT[LINE_OF[p.slotPosition]]);
-        if (who) {
-          who.sentOff = true;
-          who.minuteOff = minute;
-          t.reds++;
-          t.stats.redCards++;
-          push({ minute, type: "red_card", side: t.side, playerId: who.player.id, playerName: who.player.name, detail: "Straight red" });
+
+      // Penalty for the home side (interactive matches only, at most once).
+      if (interactive && minute === penaltyMinute && !penaltyTaken) {
+        penaltyTaken = true;
+        const taker = [...active(home)]
+          .filter((p) => p.slotPosition !== "GK")
+          .sort((a, b) => b.player.shooting - a.player.shooting || a.player.name.localeCompare(b.player.name))[0];
+        if (taker) {
+          const corner = ask({
+            kind: "penalty", minute, title: "Penalty!",
+            context: `Foul in the box! ${taker.player.name} (shooting ${taker.player.shooting}) takes it. Pick the spot.`,
+            options: [
+              { id: "left", label: "Bottom left", hint: "Keepers often dive this way" },
+              { id: "centre", label: "Down the middle", hint: "Bold — keepers rarely stay put" },
+              { id: "right", label: "Bottom right", hint: "Keepers often dive this way" },
+            ],
+          });
+          resolvePenalty(minute, corner, taker);
         }
       }
     }
+  } catch (e) {
+    if (e instanceof PendingMoment) return { done: false, events: events.slice(), score: { ...score }, moment: e.moment };
+    throw e;
   }
 
   push({ minute: 90, type: "full_time", side: null, detail: `${score.home}–${score.away}` });
@@ -257,5 +461,6 @@ export function simulateMatch(input: MatchInput): MatchResult {
   }
   const manOfTheMatch = [...ratings].sort((a, b) => b.rating - a.rating || b.goals - a.goals || a.name.localeCompare(b.name))[0] ?? null;
 
-  return { engineVersion: ENGINE_VERSION, score, events, stats: { home: home.stats, away: away.stats }, ratings, manOfTheMatch };
+  const result: MatchResult = { engineVersion: ENGINE_VERSION, score, events, stats: { home: home.stats, away: away.stats }, ratings, manOfTheMatch };
+  return { done: true, result };
 }

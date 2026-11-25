@@ -1,9 +1,11 @@
-import { ArrowLeft, ShieldCheck, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Hourglass, ShieldCheck, ShieldAlert } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
+import { EmptyState } from "@/components/dashboard/panel";
+import { LiveMatch } from "@/components/match/live-match";
 import { MatchViewer } from "@/components/match/match-viewer";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,7 +37,27 @@ async function MatchContent({ params, searchParams }: Pick<PageProps<"/matches/[
   const match = await getMatch(id); // RLS: own matches, or challenges against the viewer's club
   if (!match) notFound();
   const defending = match.user_id !== viewer.userId; // the viewer's club was challenged
-  const live = !defending && (await searchParams).live === "1";
+  const query = await searchParams;
+
+  if (match.status === "in_progress") {
+    if (defending) {
+      return <EmptyState icon={<Hourglass className="size-5" />} title="This match is being played right now" body="Check back in a minute for the result." />;
+    }
+    return (
+      <LiveMatch
+        key={match.decisions.length}
+        matchId={match.id}
+        homeName={match.homeName}
+        awayName={match.opponent_name}
+        initial={match.live?.segment ?? null}
+        needsFinish={match.live?.needsFinish ?? false}
+      />
+    );
+  }
+
+  const live = !defending && query.live === "1";
+  const fromRaw = Number(Array.isArray(query.from) ? query.from[0] : query.from);
+  const startMinute = Number.isFinite(fromRaw) ? Math.max(0, Math.min(89, Math.floor(fromRaw))) : 0;
   const challenger = match.challenger?.username ?? "A manager";
   const opponentUsername = match.opponent?.username ?? null;
 
@@ -55,6 +77,7 @@ async function MatchContent({ params, searchParams }: Pick<PageProps<"/matches/[
         rewards={{ coins: match.reward_coins, xp: match.xp_gained, rewarded: match.rewarded }}
         levelUp={levelUp}
         live={live}
+        startMinute={startMinute}
         defendingAgainst={defending ? challenger : null}
         challengeOpponent={opponentUsername}
       />

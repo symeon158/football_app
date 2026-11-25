@@ -1,6 +1,7 @@
 import "server-only";
 
-import { simulateMatch } from "@/lib/engine/simulate";
+import { liveSegment } from "@/lib/engine/live";
+import { playMatch, simulateMatch } from "@/lib/engine/simulate";
 import type { MatchInput, PlayerRating, TeamStats } from "@/lib/engine/types";
 import { ENGINE_VERSION } from "@/lib/engine/types";
 import { buildTeamSheet } from "@/lib/engine/team-sheet";
@@ -14,7 +15,7 @@ const startOfUtcDay = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now
 /** Everything the Match Centre needs (all RLS-scoped to the viewer). */
 export async function getMatchCentre(userId: string, now: Date) {
   const supabase = await createClient();
-  const [squads, formations, cards, stadium, rewards, limits, today, recent, record] = await Promise.all([
+  const [squads, formations, cards, stadium, rewards, limits, today, recent, record, unfinished] = await Promise.all([
     getSquads(userId),
     getFormations(),
     getSquadCards(userId),
@@ -30,8 +31,16 @@ export async function getMatchCentre(userId: string, now: Date) {
       .order("completed_at", { ascending: false })
       .limit(8),
     supabase.from("matches").select("home_score, away_score").eq("user_id", userId).eq("status", "completed"),
+    supabase
+      .from("matches")
+      .select("id, opponent_name, created_at")
+      .eq("user_id", userId)
+      .eq("status", "in_progress")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
-  for (const r of [rewards, limits, today, recent, record]) if (r.error) throw new Error(`Failed to load Match Centre: ${r.error.message}`);
+  for (const r of [rewards, limits, today, recent, record, unfinished]) if (r.error) throw new Error(`Failed to load Match Centre: ${r.error.message}`);
 
   const squadViews = squads.map((s) => {
     const built = buildTeamSheet(s, formations[s.formation] ?? [], cards, s.tactic);
@@ -57,6 +66,7 @@ export async function getMatchCentre(userId: string, now: Date) {
     today: { played: today.data?.length ?? 0, rewarded: (today.data ?? []).filter((m) => m.rewarded).length },
     stadium: { bonus: homeBonus(stadium.levels, stadium.costs), income: matchdayIncome(stadium.capacity), name: stadium.name },
     recent: recent.data ?? [],
+    unfinished: unfinished.data ?? null,
     totals,
   };
 }
@@ -79,7 +89,7 @@ export async function getMatch(matchId: string) {
   const [match, events] = await Promise.all([
     supabase
       .from("matches")
-      .select("id, user_id, opponent_user_id, team_id, team_snapshot, opponent_name, opponent_rating, tactic, difficulty, seed, engine_version, home_score, away_score, stats, reward_coins, xp_gained, rewarded, completed_at, challenger:profiles!matches_user_id_fkey(username), opponent:profiles!matches_opponent_user_id_fkey(username)")
+      .select("id, user_id, opponent_user_id, status, decisions, team_id, team_snapshot, opponent_name, opponent_rating, tactic, difficulty, seed, engine_version, home_score, away_score, stats, reward_coins, xp_gained, rewarded, completed_at, challenger:profiles!matches_user_id_fkey(username), opponent:profiles!matches_opponent_user_id_fkey(username)")
       .eq("id", matchId)
       .maybeSingle(),
     supabase
@@ -95,7 +105,21 @@ export async function getMatch(matchId: string) {
   const m = match.data;
   const snapshot = m.team_snapshot as unknown as MatchInput;
   const homeName = snapshot?.home?.name ?? "Home";
-  return { ...m, homeName, stats: m.stats as unknown as MatchStats, events: events.data ?? [], verification: verifyReplay(m, snapshot, events.data ?? []) };
+  const decisions = ((m.decisions as string[] | null) ?? []).slice();
+  if (m.status === "in_progress") {
+    // Not finished yet: where the match stands (up to the next key moment), derived from seed + decisions.
+    const step = snapshot?.home ? playMatch(snapshot, decisions) : null;
+    return {
+      ...m, homeName, decisions, stats: m.stats as unknown as MatchStats, events: [],
+      verification: "verified" as const,
+      live: step ? (step.done ? { segment: null, needsFinish: true } : { segment: liveSegment(step), needsFinish: false }) : null,
+    };
+  }
+  return {
+    ...m, homeName, decisions, stats: m.stats as unknown as MatchStats, events: events.data ?? [],
+    verification: verifyReplay(m, snapshot, decisions, events.data ?? []),
+    live: null,
+  };
 }
 
 /**
@@ -105,11 +129,17 @@ export async function getMatch(matchId: string) {
 function verifyReplay(
   m: { seed: number; engine_version: string; home_score: number; away_score: number },
   snapshot: MatchInput | null,
+  decisions: string[],
   events: { event_type: string; minute: number; side: string | null; player_name: string | null }[],
 ): "verified" | "mismatch" | "other-version" {
   if (!snapshot?.home || !snapshot?.away) return "mismatch";
   if (m.engine_version !== ENGINE_VERSION) return "other-version";
-  const replay = simulateMatch({ ...snapshot, seed: Number(m.seed) });
+  let replay;
+  try {
+    replay = simulateMatch({ ...snapshot, seed: Number(m.seed) }, decisions);
+  } catch {
+    return "mismatch";
+  }
   const same =
     replay.score.home === m.home_score &&
     replay.score.away === m.away_score &&

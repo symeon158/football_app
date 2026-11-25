@@ -35,7 +35,41 @@ export async function playMatch(page: Page, opts: { tactic?: string; difficulty?
   if (opts.tactic) await page.click(`label:has(input[value=${opts.tactic}])`);
   if (opts.difficulty) await page.click(`label:has(input[value=${opts.difficulty}])`);
   await page.getByRole("button", { name: "Kick off" }).click();
-  await page.waitForURL(/\/matches\/[0-9a-f-]{36}\?live=1/);
-  await page.getByRole("button", { name: "Skip to result" }).click();
+  await page.waitForURL(/\/matches\/[0-9a-f-]{36}/);
+  await playKeyMoments(page);
+  await skipToResult(page);
   await expect(page.getByText("Match stats")).toBeVisible();
+}
+
+const momentLabel = async (page: Page) => {
+  const dialog = page.getByRole("dialog");
+  if (!(await dialog.count())) return "";
+  return `${await dialog.getByText(/^Key moment/).textContent()}|${await dialog.getByRole("heading").textContent()}`;
+};
+
+/** Plays an interactive match through every key moment (first option each time) until full time. */
+export async function playKeyMoments(page: Page) {
+  const dialog = page.getByRole("dialog");
+  const skip = page.getByRole("button", { name: /Skip to result|Watch replay/ }); // full time reached
+  const next = page.getByRole("button", { name: "Next moment" });
+  for (let i = 0; i < 20; i++) {
+    await expect(dialog.or(skip).or(next).first()).toBeVisible({ timeout: 60_000 });
+    if (await skip.isVisible()) return;
+    if (await dialog.isVisible()) {
+      const label = await momentLabel(page);
+      await dialog.getByRole("button").first().click();
+      // Wait until this moment is resolved (the next one, or full time, replaces it).
+      await expect.poll(() => momentLabel(page).catch(() => ""), { timeout: 60_000 }).not.toBe(label);
+      continue;
+    }
+    await next.click().catch(() => {}); // the clock may reach the moment by itself first
+  }
+  throw new Error("the match never reached full time");
+}
+
+/** Ends the full-time replay (it may already have finished on its own). */
+export async function skipToResult(page: Page) {
+  const skip = page.getByRole("button", { name: "Skip to result" });
+  if (await skip.isVisible()) await skip.click().catch(() => {});
+  await expect(page.getByRole("button", { name: "Watch replay" })).toBeVisible();
 }

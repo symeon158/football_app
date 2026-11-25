@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { coinBalance, playMatch, signUp } from "./helpers";
+import { coinBalance, playKeyMoments, playMatch, signUp, skipToResult } from "./helpers";
 
 test.describe("Football Legends — core journeys", () => {
   test("sign up provisions a club and the dashboard shows it", async ({ page }) => {
@@ -71,13 +71,15 @@ test.describe("Football Legends — core journeys", () => {
     await expect(page.locator("tbody tr")).toHaveCount(4); // welcome, buy, pack, stadium
   });
 
-  test("match: live replay hides the reward until full time; result is verified", async ({ page }) => {
+  test("match: key moments, reward hidden until full time, result verified", async ({ page }) => {
     await signUp(page);
     await page.goto("/matches");
     await page.getByRole("button", { name: "Kick off" }).click();
-    await page.waitForURL(/\?live=1/);
+    await page.waitForURL(/\/matches\/[0-9a-f-]{36}$/);
     await expect(page.locator('header [class*="border-gold/30"]').first()).toBeHidden();
-    await page.getByRole("button", { name: "Skip to result" }).click();
+    await expect(page.getByRole("dialog").getByText(/^Key moment/)).toBeVisible({ timeout: 60_000 });
+    await playKeyMoments(page);
+    await skipToResult(page);
     await expect(page.getByText("Man of the match")).toBeVisible();
     await expect(page.getByText(/Verified replay/)).toBeVisible();
     await expect(page.locator('header [class*="border-gold/30"]').first()).toBeVisible();
@@ -132,8 +134,9 @@ test.describe("Football Legends — core journeys", () => {
     await expect(page.getByText("Their starting XI")).toBeVisible();
     await expect(page.getByText(`Paid matches against ${opponent} today: 5 of 5 left`)).toBeVisible();
     await page.getByRole("button", { name: /^Challenge / }).click();
-    await page.waitForURL(/\/matches\/[0-9a-f-]{36}\?live=1/);
+    await page.waitForURL(/\/matches\/[0-9a-f-]{36}$/);
     const matchPath = new URL(page.url()).pathname;
+    await playKeyMoments(page);
 
     await op.goto("/matches");
     await expect(op.getByText(`${me} challenged you`).first()).toBeVisible();
@@ -141,28 +144,6 @@ test.describe("Football Legends — core journeys", () => {
     await expect(op.getByText(`${me} challenged your club`)).toBeVisible();
     await expect(op.getByRole("link", { name: "Challenge back" })).toBeVisible();
     await other.close();
-  });
-
-  test("play it yourself: kick off, control a player with the keyboard, pause", async ({ page }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (e) => errors.push(e.message));
-    await signUp(page, "ply");
-    await page.goto("/matches");
-    await page.getByRole("link", { name: "Play a match yourself" }).click();
-    await page.waitForURL("**/matches/play");
-    await page.getByRole("button", { name: "Kick off" }).click();
-    await page.keyboard.down("KeyD");
-    await page.keyboard.down("ShiftLeft");
-    await page.waitForTimeout(2500);
-    await page.keyboard.press("KeyJ");
-    await page.keyboard.up("KeyD");
-    await page.keyboard.up("ShiftLeft");
-    await expect(page.getByText(/^[1-9]d*'$/)).toBeVisible({ timeout: 15_000 }); // the match clock is running
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("heading", { name: "Paused" })).toBeVisible();
-    await page.getByRole("button", { name: "Resume" }).first().click();
-    await expect(page.getByRole("heading", { name: "Paused" })).toHaveCount(0);
-    expect(errors).toEqual([]);
   });
 
   test("forgot password: e-mailed link lets the player choose a new password", async ({ page, context }) => {

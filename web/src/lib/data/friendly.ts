@@ -115,6 +115,7 @@ export async function getChallengeActivity(userId: string) {
       .from("matches")
       .select("id, home_score, away_score, created_at, challenger:profiles!matches_user_id_fkey(username)")
       .eq("opponent_user_id", userId)
+      .eq("status", "completed")
       .order("created_at", { ascending: false })
       .limit(10),
   ]);

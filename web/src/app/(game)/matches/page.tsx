@@ -1,4 +1,4 @@
-import { Gamepad2, Swords, Trophy } from "lucide-react";
+import { Swords, Trophy } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -41,6 +41,15 @@ async function MatchesContent() {
 
   return (
     <div className="grid gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      {c.unfinished && (
+        <Link
+          href={`/matches/${c.unfinished.id}`}
+          className="flex items-center justify-between gap-3 rounded-2xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm hover:bg-gold/15 lg:col-span-2"
+        >
+          <span><span className="font-semibold">Unfinished match</span> vs {c.unfinished.opponent_name} — your decisions are waiting.</span>
+          <span className="font-semibold text-gold">Continue →</span>
+        </Link>
+      )}
       <section aria-label="Kick off" className="rounded-2xl border bg-card/70 p-4 backdrop-blur sm:p-6">
         <KickoffForm
           squads={c.squads.map((s) => ({
@@ -63,16 +72,6 @@ async function MatchesContent() {
       </section>
 
       <div className="space-y-4 sm:space-y-6">
-        <Panel title="Play it yourself">
-          <p className="text-sm text-muted-foreground">
-            Take control on the pitch with a controller or keyboard. <span className="font-medium text-gold">Beta</span> — results
-            aren&apos;t saved and don&apos;t pay coins yet.
-          </p>
-          <Link href="/matches/play" className={cn(buttonVariants({ variant: "outline" }), "mt-3 w-full gap-2")}>
-            <Gamepad2 className="size-4" /> Play a match yourself
-          </Link>
-        </Panel>
-
         <Panel title="Challenge a manager">
           <p className="text-sm text-muted-foreground">Play your friends&apos; real squads. They don&apos;t need to be online.</p>
           <Link href="/matches/challenge" className={cn(buttonVariants(), "mt-3 w-full gap-2")}>

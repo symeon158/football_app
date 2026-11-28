@@ -71,6 +71,35 @@ describe("3D match director", () => {
     expect(crossedInside).toBe(false);
   });
 
+  it("wins the ball back by closing down and tackling when possession changes", () => {
+    const d = make();
+    for (let i = 0; i < 60 * 4; i++) d.step(1 / 60, "home"); // home keep the ball after kick-off
+    expect(d.carrier()?.side).toBe("home");
+    let won = false;
+    for (let i = 0; i < 60 * 6 && !won; i++) {
+      d.step(1 / 60, "away");
+      won = d.carrier()?.side === "away";
+    }
+    expect(won).toBe(true);
+  });
+
+  it("players keep their distance and turn smoothly", () => {
+    const d = make();
+    let maxTurn = 0;
+    const before = d.agents.map((a) => a.facing);
+    for (let i = 0; i < 60 * 8; i++) {
+      d.step(1 / 60, i < 240 ? "home" : "away");
+      d.agents.forEach((a, k) => {
+        const turn = Math.abs(Math.atan2(Math.sin(a.facing - before[k]), Math.cos(a.facing - before[k])));
+        if (a.kick === 0 && a.tackle === 0) maxTurn = Math.max(maxTurn, turn);
+        before[k] = a.facing;
+      });
+    }
+    expect(maxTurn).toBeLessThan(0.2); // never snaps around in one frame
+    const crowded = d.agents.filter((a) => d.agents.some((b) => b !== a && Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) < 0.5));
+    expect(crowded.length).toBeLessThanOrEqual(2);
+  });
+
   it("turns match events into the right scenes", () => {
     expect(highlightFor({ type: "goal", side: "home", player: "A", detail: "2–1 (pen)" })).toMatchObject({ kind: "goal", penalty: true, scorer: "A" });
     expect(highlightFor({ type: "save", side: "away", player: "Keeper", detail: "Denies Max Power" })).toMatchObject({ kind: "save", side: "home", scorer: "Max Power" });

@@ -53,7 +53,7 @@ const setView = (v: "2d" | "3d") => {
 
 const HOME = SERIES_COLORS[0];
 const AWAY = SERIES_COLORS[1];
-const SPEEDS = [{ label: "1×", ms: 320 }, { label: "3×", ms: 110 }] as const;
+const SPEEDS = [{ label: "1×", ms: 220 }, { label: "3×", ms: 75 }] as const;
 const CHUNK = 3; // minutes the server reveals per request
 
 type Slot = { x: number; y: number };
@@ -242,6 +242,9 @@ export function LiveMatch({ matchId, homeName, awayName, initial, needsFinish, m
                 awayNames={scouting.players.map((p) => p.name)}
                 homeColor={HOME}
                 awayColor={AWAY}
+                homeTeam={homeName}
+                awayTeam={awayName}
+                score={score}
                 speed={speed === SPEEDS[1] ? 3 : 1}
                 paused={paused || deciding}
                 started={started}

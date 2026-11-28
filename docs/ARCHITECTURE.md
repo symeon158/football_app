@@ -325,6 +325,11 @@ replay (`data-match-live`) so the reward can't spoil the result.
   The match clock waits while a scene plays, and the scoreboard/commentary reveal an event only when its
   scene reaches the outcome (no spoilers). Procedural canvas textures (pitch, ball, numbers, crowd,
   boards) and Web Audio synthesised sounds (whistle, kicks, crowd, roar) — no image or audio assets.
+  Open play uses steering (arrive, separation, smooth turning), rolling ground passes chosen by
+  forward value and free space, attacking runs, a compact defensive line, and ball-winning by closing
+  down and tackling when the feed's possession changes. Articulated players (knees, elbows) with
+  run/kick/slide/dive/celebration poses; real-time shadows on devices with more than 4 CPU cores;
+  TV score graphic, replay badge, shot trail and goal camera shake.
 
 ## 3. Database schema
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { FastForward, Loader2, Megaphone, Pause, Play, Repeat2, SkipForward } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 
 import { advanceMatch, decideMoment, giveOrder, resumeMatch, type MomentResult, type OrderInput } from "@/app/(game)/matches/actions";
 import { SERIES_COLORS } from "@/components/players/series-colors";
@@ -11,6 +12,44 @@ import type { LiveEvent, LiveSegment } from "@/lib/engine/live";
 import { cn } from "@/lib/utils";
 
 import { describe, EventIcon } from "./match-viewer";
+
+/** The 3D stadium is loaded only on this page, and only in the browser. */
+const Arena3D = dynamic(() => import("./arena/arena-3d"), { ssr: false, loading: () => <div className="aspect-video w-full animate-pulse bg-emerald-950" /> });
+const noSubscribe = () => () => {};
+const hasWebGL = () => {
+  try {
+    const c = document.createElement("canvas");
+    return Boolean(c.getContext("webgl2") ?? c.getContext("webgl"));
+  } catch {
+    return false;
+  }
+};
+
+/** The viewer's choice of 3D or classic (2D) match view, remembered on this device. */
+const VIEW_KEY = "fl-match-view";
+const subscribeView = (cb: () => void) => {
+  window.addEventListener("storage", cb);
+  window.addEventListener("fl-view", cb);
+  return () => {
+    window.removeEventListener("storage", cb);
+    window.removeEventListener("fl-view", cb);
+  };
+};
+const readView = () => {
+  try {
+    return localStorage.getItem(VIEW_KEY) === "2d" ? "2d" : "3d";
+  } catch {
+    return "3d";
+  }
+};
+const setView = (v: "2d" | "3d") => {
+  try {
+    localStorage.setItem(VIEW_KEY, v);
+  } catch {
+    /* private mode: the choice just isn't remembered */
+  }
+  window.dispatchEvent(new Event("fl-view"));
+};
 
 const HOME = SERIES_COLORS[0];
 const AWAY = SERIES_COLORS[1];
@@ -58,13 +97,22 @@ export function LiveMatch({ matchId, homeName, awayName, initial, needsFinish, m
   const [subOff, setSubOff] = useState<string | null>(null);
   const [subOn, setSubOn] = useState<string | null>(null);
   const fetching = useRef(false);
+  // 3D view: the clock waits while a scene plays, and events are shown only once acted out.
+  const canWebgl = useSyncExternalStore(noSubscribe, hasWebGL, () => false);
+  const view = useSyncExternalStore(subscribeView, readView, () => "3d" as const);
+  const webgl = canWebgl && view === "3d";
+  const [sceneBusy, setSceneBusy] = useState(false);
+  const [revealed, setRevealed] = useState<number | null>(null);
+  const [skipBefore, setSkipBefore] = useState(() => (initial && !fresh ? initial.events.filter((e) => e.minute <= initial.minute).length : 0));
 
-  const deciding = Boolean(seg?.moment) && clock >= (seg?.moment?.minute ?? 0);
-  const visible = useMemo(() => (seg?.events ?? []).filter((e) => e.minute <= clock || e.type === "kickoff"), [seg, clock]);
+  const clockEvents = useMemo(() => (seg?.events ?? []).filter((e) => e.minute <= clock || e.type === "kickoff"), [seg, clock]);
+  const visible = webgl && revealed !== null ? clockEvents.slice(0, Math.max(1, revealed)) : clockEvents;
+  const caughtUp = !webgl || (revealed !== null && revealed >= clockEvents.length && !sceneBusy);
+  const deciding = Boolean(seg?.moment) && clock >= (seg?.moment?.minute ?? 0) && caughtUp;
   const score = visible.reduce((s, e) => (e.type === "goal" && e.side ? { ...s, [e.side]: s[e.side] + 1 } : s), { home: 0, away: 0 });
   const last = visible.at(-1);
   const flash = last && last.minute >= clock - 1 && ["goal", "save", "chance"].includes(last.type) ? last : null;
-  const running = started && !paused && !deciding && Boolean(seg);
+  const running = started && !paused && !deciding && Boolean(seg) && !sceneBusy;
 
   // Keep coins/level in the top bar hidden until full time.
   useEffect(() => {
@@ -104,7 +152,7 @@ export function LiveMatch({ matchId, homeName, awayName, initial, needsFinish, m
   // Caught up with the server: ask it to reveal the next few minutes (retrying if the network drops).
   const [retry, setRetry] = useState(0);
   useEffect(() => {
-    if (!running || !seg || seg.moment || clock < seg.minute || fetching.current) return;
+    if (!running || !seg || seg.moment || clock < seg.minute || fetching.current || !caughtUp) return;
     fetching.current = true;
     const from = clock;
     advanceMatch(matchId, seg.minute >= 90 ? 90 : seg.minute + CHUNK)
@@ -117,7 +165,7 @@ export function LiveMatch({ matchId, homeName, awayName, initial, needsFinish, m
         fetching.current = false;
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, seg, clock, matchId, retry]);
+  }, [running, seg, clock, matchId, retry, caughtUp]);
 
   const choose = (choice: string) => {
     if (!seg?.moment) return;
@@ -148,6 +196,7 @@ export function LiveMatch({ matchId, homeName, awayName, initial, needsFinish, m
   }, [seg, deciding, last, clock, started]);
 
   const h = seg?.home;
+  const possessionNow = [...(seg?.possession ?? [])].reverse().find((p) => p.minute <= clock)?.side ?? "home";
   const shoutReady = h ? (seg?.minute ?? 0) >= h.shoutReadyAt : false;
   const controlsDisabled = !started || busy || deciding || !seg || seg.minute >= 90;
 
@@ -178,12 +227,32 @@ export function LiveMatch({ matchId, homeName, awayName, initial, needsFinish, m
         </div>
       </section>
 
-      <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+      <div className="grid gap-4 sm:gap-6">
         <div className="space-y-4 sm:space-y-6">
           {/* Pitch */}
           <section aria-label="Live pitch" className="relative overflow-hidden rounded-2xl border bg-emerald-900">
-            <Pitch ball={ball} homeSlots={scouting?.homeSlots ?? []} awaySlots={scouting?.awaySlots ?? []} />
-            {flash && !deciding && (
+            {webgl && scouting && seg ? (
+              <Arena3D
+                events={clockEvents}
+                clock={clock}
+                possession={possessionNow}
+                homeSlots={scouting.homeSlots}
+                awaySlots={scouting.awaySlots}
+                homeNames={seg.home.onPitch.map((p) => p.name)}
+                awayNames={scouting.players.map((p) => p.name)}
+                homeColor={HOME}
+                awayColor={AWAY}
+                speed={speed === SPEEDS[1] ? 3 : 1}
+                paused={paused || deciding}
+                started={started}
+                skipBefore={skipBefore}
+                onBusy={setSceneBusy}
+                onReveal={setRevealed}
+              />
+            ) : (
+              <Pitch ball={ball} homeSlots={scouting?.homeSlots ?? []} awaySlots={scouting?.awaySlots ?? []} />
+            )}
+            {!webgl && flash && !deciding && (
               <div className="pointer-events-none absolute inset-x-0 top-[38%] flex justify-center">
                 <span
                   key={`${flash.minute}-${flash.type}`}
@@ -239,6 +308,11 @@ export function LiveMatch({ matchId, homeName, awayName, initial, needsFinish, m
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setSpeed(speed === SPEEDS[0] ? SPEEDS[1] : SPEEDS[0])} aria-label={`Speed ${speed.label}, change speed`}>
                 <FastForward className="size-3.5" /> {speed.label}
               </Button>
+              {canWebgl && (
+                <Button size="sm" variant="outline" onClick={() => { setSceneBusy(false); setRevealed(null); if (!webgl) setSkipBefore(clockEvents.length); setView(webgl ? "2d" : "3d"); }}>
+                  {webgl ? "Classic view" : "3D view"}
+                </Button>
+              )}
               {!matchday && (
                 <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => setClock(seg.moment?.minute ?? seg.minute)}>
                   <SkipForward className="size-3.5" /> Next moment
@@ -249,7 +323,7 @@ export function LiveMatch({ matchId, homeName, awayName, initial, needsFinish, m
           )}
         </div>
 
-        <div className="space-y-4 sm:space-y-6">
+        <div className="grid items-start gap-4 sm:gap-6 lg:grid-cols-2">
           {/* Touchline */}
           {matchday && h && (
             <section aria-labelledby="touchline-h" className="rounded-2xl border bg-card/70 p-4">

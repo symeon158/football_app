@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { coinBalance, playKeyMoments, playMatch, signUp, skipToResult } from "./helpers";
+import { classicView, coinBalance, playKeyMoments, playMatch, signUp, skipToResult } from "./helpers";
 
 test.describe("Football Legends — core journeys", () => {
   test("sign up provisions a club and the dashboard shows it", async ({ page }) => {
@@ -141,6 +141,7 @@ test.describe("Football Legends — core journeys", () => {
     await page.waitForURL(`**/matches/challenge/${opponent}`);
     await expect(page.getByText("Their starting XI")).toBeVisible();
     await expect(page.getByText(`Paid matches against ${opponent} today: 5 of 5 left`)).toBeVisible();
+    await classicView(page);
     await page.getByRole("button", { name: /^Challenge / }).click();
     await page.waitForURL(/\/matches\/[0-9a-f-]{36}$/);
     const matchPath = new URL(page.url()).pathname;

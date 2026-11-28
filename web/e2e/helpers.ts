@@ -31,6 +31,7 @@ export async function noHorizontalOverflow(page: Page) {
 /** Plays one match from the Match Centre and skips to the result. */
 export async function playMatch(page: Page, opts: { tactic?: string; difficulty?: string } = {}) {
   await page.goto("/matches");
+  await classicView(page);
   await expect(page.getByText("Season record")).toBeVisible();
   if (opts.tactic) await page.click(`label:has(input[value=${opts.tactic}])`);
   if (opts.difficulty) await page.click(`label:has(input[value=${opts.difficulty}])`);
@@ -75,4 +76,9 @@ export async function skipToResult(page: Page) {
   const skip = page.getByRole("button", { name: "Skip to result" });
   if (await skip.isVisible()) await skip.click().catch(() => {});
   await expect(page.getByRole("button", { name: "Watch replay" })).toBeVisible();
+}
+
+/** Switches matches to the lighter classic (2D) view for this browser (faster for multi-match tests). */
+export async function classicView(page: Page) {
+  await page.evaluate(() => localStorage.setItem("fl-match-view", "2d"));
 }

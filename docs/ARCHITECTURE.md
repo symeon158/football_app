@@ -318,6 +318,13 @@ replay (`data-match-live`) so the reward can't spoil the result.
   unchanged. Clubs may set a public `stadiums.area` (Latin/Greek letters, 2–30, owner-updatable column)
   used by `get_area_table` (wins per area, grouped case-insensitively) and `get_manager_area`
   (local-derby badge on challenges, area on profiles).
+- **3D match view.** The live match is acted out in WebGL (`three` + `@react-three/fiber`, loaded only
+  on the match page; classic 2D view as fallback and as a per-device toggle). `lib/match3d/director.ts`
+  (pure, unit-tested) turns each server event into a scene — build-up, strike, goal/save/miss/block,
+  celebration and slow-motion replay — and moves 22 agents and the ball; it never changes results.
+  The match clock waits while a scene plays, and the scoreboard/commentary reveal an event only when its
+  scene reaches the outcome (no spoilers). Procedural canvas textures (pitch, ball, numbers, crowd,
+  boards) and Web Audio synthesised sounds (whistle, kicks, crowd, roar) — no image or audio assets.
 
 ## 3. Database schema
 
